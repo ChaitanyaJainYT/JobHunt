@@ -116,10 +116,9 @@ def build_gmail_service(creds_file: str = "credentials.json"):
     root = Path(__file__).resolve().parent.parent
     cred_path = root / creds_file if not Path(creds_file).is_absolute() else Path(creds_file)
     tok_path = root / "token.json"
+    from src.sheets import load_valid_creds
     try:
-        creds = None
-        if tok_path.exists():
-            creds = Credentials.from_authorized_user_file(str(tok_path), scopes)
+        creds = load_valid_creds(tok_path, scopes)
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
@@ -128,13 +127,9 @@ def build_gmail_service(creds_file: str = "credentials.json"):
                     raise GmailError(f"Google credentials not found: {cred_path}.")
                 flow = InstalledAppFlow.from_client_secrets_file(str(cred_path), scopes)
                 creds = flow.run_local_server(port=0)
-            # merge with existing token scopes if present
-            try:
-                prev = json.loads(tok_path.read_text(encoding="utf-8")) if tok_path.exists() else {}
-                prev.update(json.loads(creds.to_json()))
-                tok_path.write_text(json.dumps(prev), encoding="utf-8")
-            except Exception:
-                tok_path.write_text(creds.to_json(), encoding="utf-8")
+            # merge scopes with any previously stored ones (see save_token_merged)
+            from src.sheets import save_token_merged
+            save_token_merged(tok_path, creds)
         return build("gmail", "v1", credentials=creds)
     except GmailError:
         raise

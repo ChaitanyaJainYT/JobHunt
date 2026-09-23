@@ -55,6 +55,32 @@ def test_oauth_denied_hint_empty_for_other_errors():
     assert oauth_denied_hint("connection refused") == ""
 
 
+def test_load_valid_creds_rejects_narrow_scopes(tmp_path):
+    import json
+    from src.sheets import load_valid_creds
+    tok = tmp_path / "token.json"
+    tok.write_text(json.dumps({
+        "token": "ya29.fake", "refresh_token": "r", "token_uri": "https://oauth2.googleapis.com/token",
+        "client_id": "c", "client_secret": "s", "scopes": ["https://example.com/a"],
+        "expiry": "2030-01-01T00:00:00Z",
+    }))
+    assert load_valid_creds(tok, ["https://example.com/a", "https://example.com/b"]) is None
+    assert load_valid_creds(tok, ["https://example.com/a"]) is not None
+    assert load_valid_creds(tmp_path / "missing.json", ["x"]) is None
+
+
+def test_save_token_merged_unions_scopes(tmp_path):
+    import json
+    from src.sheets import save_token_merged
+    tok = tmp_path / "token.json"
+    tok.write_text(json.dumps({"token": "t", "scopes": ["scopeA"]}))
+    class FakeCreds:
+        def to_json(self):
+            return json.dumps({"token": "t2", "scopes": ["scopeB"]})
+    save_token_merged(tok, FakeCreds())
+    assert set(json.loads(tok.read_text())["scopes"]) == {"scopeA", "scopeB"}
+
+
 def test_groq_fallback_on_gemini_quota(monkeypatch):
     calls = []
     def fake_gemini(prompt, api_key, model, timeout):

@@ -67,6 +67,31 @@ def ensure_header(ws) -> None:
             ws.rows.insert(0, list(HEADER)) if hasattr(ws, "rows") else ws.append_row(HEADER)
 
 
+def load_valid_creds(tok_path: Path, scopes: list[str]):
+    """Load cached creds only if present, valid, AND covering all scopes.
+
+    Both Credentials.valid and from_authorized_user_file() ignore the scopes
+    actually granted to the stored token, so without a file-level check a
+    Sheets-only token would be silently reused for Gmail -> 403.
+    Returns None when re-consent is needed.
+    """
+    import json
+    from google.oauth2.credentials import Credentials
+    if not tok_path.exists():
+        return None
+    try:
+        granted = set(json.loads(tok_path.read_text(encoding="utf-8")).get("scopes", []) or [])
+    except Exception:
+        return None
+    if not set(scopes) <= granted:
+        return None
+    try:
+        creds = Credentials.from_authorized_user_file(str(tok_path), scopes)
+    except Exception:
+        return None
+    return creds if (creds and creds.valid) else None
+
+
 def _open_worksheet(sheet_id: str, creds_file: str, client=None):
     if client is not None:
         return client.open_by_key(sheet_id).sheet1
@@ -88,9 +113,7 @@ def _open_worksheet(sheet_id: str, creds_file: str, client=None):
         root = Path(__file__).resolve().parent.parent
         cred_path = root / creds_file if not Path(creds_file).is_absolute() else Path(creds_file)
         tok_path = root / "token.json"
-        creds = None
-        if tok_path.exists():
-            creds = Credentials.from_authorized_user_file(str(tok_path), scopes)
+        creds = load_valid_creds(tok_path, scopes)
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
@@ -101,7 +124,7 @@ def _open_worksheet(sheet_id: str, creds_file: str, client=None):
                         "client in Google Cloud Console, download as credentials.json.")
                 flow = InstalledAppFlow.from_client_secrets_file(str(cred_path), scopes)
                 creds = flow.run_local_server(port=0)
-            tok_path.write_text(creds.to_json(), encoding="utf-8")
+            save_token_merged(tok_path, creds)
         gc = gspread.authorize(creds)
         return gc.open_by_key(sheet_id).sheet1
     except SheetsError:
@@ -109,6 +132,29 @@ def _open_worksheet(sheet_id: str, creds_file: str, client=None):
     except Exception as e:
         raise SheetsError(f"Sheets auth/open failed: {e}. {oauth_denied_hint(str(e))}"
                           "Run 'python agent.py doctor'.") from e
+
+
+def save_token_merged(tok_path: Path, creds) -> None:
+    """Persist creds, UNIONING scopes with any previously stored ones.
+
+    Each OAuth consent only lists its own scopes; a naive overwrite would
+    drop the other flow's scopes and force an endless re-consent ping-pong
+    (the refresh token itself accumulates all granted scopes server-side).
+    """
+    import json
+    prev_scopes: set[str] = set()
+    try:
+        if tok_path.exists():
+            prev_scopes = set(json.loads(tok_path.read_text(encoding="utf-8")).get("scopes", []) or [])
+    except Exception:
+        pass
+    try:
+        data = json.loads(creds.to_json())
+    except Exception:
+        tok_path.write_text(creds.to_json(), encoding="utf-8")
+        return
+    data["scopes"] = sorted(prev_scopes | set(data.get("scopes", []) or []))
+    tok_path.write_text(json.dumps(data), encoding="utf-8")
 
 
 def oauth_denied_hint(msg: str) -> str:
