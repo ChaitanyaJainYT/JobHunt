@@ -44,6 +44,8 @@ Copy `.env.example` to `.env` (auto-created) or run `setup`.
 | `RAPIDAPI_KEY` | yes | https://rapidapi.com, subscribe JSearch free tier |
 | `RAPIDAPI_HOST` | no | default `jsearch.p.rapidapi.com` |
 | `RAPIDAPI_JOB_ENDPOINT` | no | default `https://jsearch.p.rapidapi.com/job-details` |
+| `RAPIDAPI_SEARCH_ENDPOINT` | no | default `https://jsearch.p.rapidapi.com/search-v2` |
+| `RAPIDAPI_COUNTRY` | no | JSearch country bias, default `in` |
 | `GOOGLE_SHEET_ID` | yes | from Sheet URL between `/d/` and `/edit` |
 | `GOOGLE_CREDENTIALS_FILE` | no | default `credentials.json` (Desktop OAuth client) |
 
@@ -53,6 +55,10 @@ Copy `.env.example` to `.env` (auto-created) or run `setup`.
 2. Tectonic (LaTeX, zero-config): Windows `winget install tectonic`, then reopen terminal. Verify with `python agent.py doctor`.
 3. Your base resume as `main.tex` in project root (a `main.tex.sample` is bundled for trial).
 4. Google (one-time): Google Cloud Console -> OAuth Desktop client -> download as `credentials.json`. First Sheets/Gmail run opens browser, saves `token.json` for later. All three are gitignored.
+
+## How job fetching works
+
+LinkedIn numeric IDs are not JSearch IDs, so for a LinkedIn URL the flow is: public page (title/company/description, free) → `/search-v2` text match → full `job-details` record (2 RapidAPI calls). Enrichment only attaches when the **company matches** (suffix-normalized) — a same-title role at another company is rejected and public data is kept. Non-LinkedIn hosts/IDs go straight to RapidAPI.
 
 ## Outputs
 

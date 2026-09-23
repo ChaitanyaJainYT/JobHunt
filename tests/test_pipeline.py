@@ -51,6 +51,8 @@ def test_pipeline_continues_on_pdf_fail(tmp_path):
                                         "rapidapi_job_endpoint": "e", "gemini_api_key": "g",
                                         "groq_api_key": "", "groq_model": "gm",
                                         "llm_model": "m",
+                                        "rapidapi_search_endpoint": "https://e/search",
+                                        "rapidapi_country": "in",
                                         "google_sheet_id": "demo",
                                         "google_credentials_file": "c"})(),
                      _overrides={
@@ -97,6 +99,8 @@ def test_resume_reuses_saved_artifacts(tmp_path, monkeypatch):
                                          "rapidapi_job_endpoint": "e", "gemini_api_key": "g",
                                          "groq_api_key": "", "groq_model": "gm",
                                          "llm_model": "m",
+                                         "rapidapi_search_endpoint": "https://e/search",
+                                         "rapidapi_country": "in",
                                          "google_sheet_id": "demo",
                                          "google_credentials_file": "c"})(),
                       _overrides={

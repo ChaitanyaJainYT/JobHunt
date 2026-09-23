@@ -29,6 +29,8 @@ class AppConfig:
     rapidapi_key: str = ""
     rapidapi_host: str = "jsearch.p.rapidapi.com"
     rapidapi_job_endpoint: str = "https://jsearch.p.rapidapi.com/job-details"
+    rapidapi_search_endpoint: str = "https://jsearch.p.rapidapi.com/search-v2"
+    rapidapi_country: str = "in"
     google_sheet_id: str = ""
     google_credentials_file: str = "credentials.json"
     demo: bool = False
@@ -47,6 +49,8 @@ _MANAGED_KEYS: list[tuple[str, str, bool, str]] = [
     ("RAPIDAPI_KEY", "rapidapi_key", True, "RapidAPI key (https://rapidapi.com, subscribe JSearch free)"),
     ("RAPIDAPI_HOST", "rapidapi_host", False, "RapidAPI host [jsearch.p.rapidapi.com]"),
     ("RAPIDAPI_JOB_ENDPOINT", "rapidapi_job_endpoint", False, "RapidAPI job endpoint URL"),
+    ("RAPIDAPI_SEARCH_ENDPOINT", "rapidapi_search_endpoint", False, "RapidAPI search URL [search-v2]"),
+    ("RAPIDAPI_COUNTRY", "rapidapi_country", False, "JSearch country bias [in]"),
     ("GOOGLE_SHEET_ID", "google_sheet_id", True, "Google Sheet ID (from sheet URL between /d/ and /edit)"),
     ("GOOGLE_CREDENTIALS_FILE", "google_credentials_file", False, "Google OAuth credentials file [credentials.json]"),
 ]
@@ -114,6 +118,10 @@ def run_setup_wizard() -> AppConfig:
             values[env_key] = "jsearch.p.rapidapi.com"
         elif env_key == "RAPIDAPI_JOB_ENDPOINT" and not values.get(env_key):
             values[env_key] = "https://jsearch.p.rapidapi.com/job-details"
+        elif env_key == "RAPIDAPI_SEARCH_ENDPOINT" and not values.get(env_key):
+            values[env_key] = "https://jsearch.p.rapidapi.com/search-v2"
+        elif env_key == "RAPIDAPI_COUNTRY" and not values.get(env_key):
+            values[env_key] = "in"
         elif env_key == "GOOGLE_CREDENTIALS_FILE" and not values.get(env_key):
             values[env_key] = "credentials.json"
 
@@ -135,6 +143,8 @@ def _from_values(values: dict[str, str], demo: bool) -> AppConfig:
         rapidapi_key=get("RAPIDAPI_KEY"),
         rapidapi_host=get("RAPIDAPI_HOST", "jsearch.p.rapidapi.com"),
         rapidapi_job_endpoint=get("RAPIDAPI_JOB_ENDPOINT", "https://jsearch.p.rapidapi.com/job-details"),
+        rapidapi_search_endpoint=get("RAPIDAPI_SEARCH_ENDPOINT", "https://jsearch.p.rapidapi.com/search-v2"),
+        rapidapi_country=get("RAPIDAPI_COUNTRY", "in"),
         google_sheet_id=get("GOOGLE_SHEET_ID"),
         google_credentials_file=get("GOOGLE_CREDENTIALS_FILE", "credentials.json"),
         demo=demo,

@@ -110,6 +110,14 @@ def test_auto_falls_back_when_api_empty(monkeypatch):
     assert job.company == "LSEG"
 
 
+def test_backend_error_envelope_surfaced(monkeypatch):
+    payload = {"status": "ERROR", "request_id": "abc",
+               "error": {"message": "Missing query", "code": 400}}
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _resp(200, payload))
+    with pytest.raises(JobFetchError, match="Missing query"):
+        fetch_job("https://www.linkedin.com/jobs/view/111", "k", "h", "https://e")
+
+
 def test_public_skips_signup_apply_link(monkeypatch):
     import src.job_api as J
     html = ('<html><body>'
@@ -125,6 +133,137 @@ def test_public_skips_signup_apply_link(monkeypatch):
     monkeypatch.setattr(requests, "get", lambda *a, **k: R())
     job = J.fetch_linkedin_public("https://www.linkedin.com/jobs/view/999")
     assert job.apply_link == "https://www.linkedin.com/jobs/view/999"
+
+
+def test_auto_linkedin_path_tries_search_then_public(monkeypatch):
+    import src.job_api as J
+    from pathlib import Path
+    html = (Path(__file__).parent / "fixtures" / "sample_linkedin_public.html").read_text(encoding="utf-8")
+    calls = []
+    class R:
+        status_code = 200
+        text = html
+    def fake_get(url, **k):
+        calls.append(url)
+        if "linkedin.com" in url:
+            return R()
+        # search returns nothing confident -> public data kept
+        return _resp(200, _search_payload([]))
+    monkeypatch.setattr(requests, "get", fake_get)
+    job = J.fetch_job_auto("https://www.linkedin.com/jobs/view/4012345678",
+                           "k", "jsearch.p.rapidapi.com", "https://jsearch.p.rapidapi.com/job-details")
+    assert job.company == "LSEG"
+    assert len(calls) == 2 and "linkedin.com" in calls[0] and "search-v2" in calls[1]
+    assert "job-details" not in " ".join(calls)  # no blind details call with LinkedIn ID
+
+
+def test_auto_uses_rapidapi_for_linkedin_host(monkeypatch):
+    import src.job_api as J
+    payload = {"data": {"job_title": "T", "employer_name": "C", "job_description": "D"}}
+    seen = []
+    def fake_get(url, **k):
+        seen.append(url)
+        return _resp(200, payload)
+    monkeypatch.setattr(requests, "get", fake_get)
+    job = J.fetch_job_auto("https://www.linkedin.com/jobs/view/4012345678",
+                           "k", "linkedin-jobs-api.p.rapidapi.com", "https://e/job-details")
+    assert job.title == "T"
+    assert seen and "linkedin.com/jobs" not in seen[0]
+
+
+def _search_payload(jobs):
+    return {"status": "OK", "data": {"jobs": jobs, "cursor": None}}
+
+
+def test_search_unwraps_jobs_dict(monkeypatch):
+    import src.job_api as J
+    jobs = [{"job_id": "TOK1", "job_title": "Data Engineer", "employer_name": "LSEG",
+             "job_description": "Python pipelines", "job_apply_link": "https://apply/1"}]
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _resp(200, _search_payload(jobs)))
+    out = J.search_jobs("Data Engineer LSEG", "k", "h", "https://e/search-v2", "in")
+    assert len(out) == 1 and out[0]["job_id"] == "TOK1"
+
+
+def test_search_backend_error_surfaced(monkeypatch):
+    import src.job_api as J
+    payload = {"status": "ERROR", "error": {"message": "Invalid date posted value.", "code": 400}}
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _resp(200, payload))
+    with pytest.raises(JobFetchError, match="Invalid date posted"):
+        J.search_jobs("x", "k", "h", "https://e/search-v2")
+
+
+def test_enrich_picks_company_match_and_keeps_linkedin_id(monkeypatch):
+    import src.job_api as J
+    public = J.Job("Data Engineer", "LSEG", "public desc", "https://linkedin.com/jobs/view/99",
+                   "99", "https://linkedin.com/jobs/view/99")
+    jobs = [
+        {"job_id": "WRONG", "job_title": "Barista", "employer_name": "Cafe",
+         "job_description": "coffee", "job_apply_link": "https://x/1"},
+        {"job_id": "RIGHT", "job_title": "Senior Data Engineer", "employer_name": "LSEG",
+         "job_description": "rich desc", "job_apply_link": "https://shine.com/apply/9"},
+    ]
+    details = {"data": {"job_title": "Senior Data Engineer", "employer_name": "LSEG",
+                        "job_description": "rich desc", "job_apply_link": "https://shine.com/apply/9"}}
+    def fake_get(url, **k):
+        if "search-v2" in url:
+            return _resp(200, _search_payload(jobs))
+        return _resp(200, details)
+    monkeypatch.setattr(requests, "get", fake_get)
+    rich = J.enrich_via_search(public, "k", "h", "https://e/job-details", "https://e/search-v2")
+    assert rich.description == "rich desc"
+    assert rich.job_id == "99"  # LinkedIn ID preserved for folders/resume
+    assert "shine.com" in rich.apply_link
+
+
+def test_enrich_rejects_title_only_match(monkeypatch):
+    # Regression: "Data Engineer @ TailorFlow" must NOT attach to an HP posting
+    # even though title tokens overlap 100%.
+    import src.job_api as J
+    public = J.Job("Data Engineer", "HP", "public desc", "u", "99", "u")
+    jobs = [{"job_id": "X", "job_title": "Data Engineer AI Applications",
+             "employer_name": "TailorFlow AI", "job_description": "wrong company"}]
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _resp(200, _search_payload(jobs)))
+    assert J.enrich_via_search(public, "k", "h", "https://e/job-details", "https://e/search-v2") is None
+
+
+def test_enrich_accepts_company_variants(monkeypatch):
+    import src.job_api as J
+    assert J._company_hit("HP", "HP Inc.")
+    assert J._company_hit("LSEG", "LSEG")
+    assert not J._company_hit("HP", "TailorFlow AI")
+    assert not J._company_hit("", "HP")
+
+
+def test_enrich_returns_none_without_confident_match(monkeypatch):
+    import src.job_api as J
+    public = J.Job("Data Engineer", "LSEG", "public desc", "u", "99", "u")
+    jobs = [{"job_id": "X", "job_title": "Barista", "employer_name": "Cafe",
+             "job_description": "coffee"}]
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _resp(200, _search_payload(jobs)))
+    assert J.enrich_via_search(public, "k", "h", "https://e/job-details", "https://e/search-v2") is None
+
+
+def test_auto_linkedin_path_enriches(monkeypatch):
+    import src.job_api as J
+    from pathlib import Path
+    html = (Path(__file__).parent / "fixtures" / "sample_linkedin_public.html").read_text(encoding="utf-8")
+    jobs = [{"job_id": "T1", "job_title": "Data Engineer", "employer_name": "LSEG",
+             "job_description": "rich", "job_apply_link": "https://apply/1"}]
+    details = {"data": {"job_title": "Data Engineer", "employer_name": "LSEG",
+                        "job_description": "rich", "job_apply_link": "https://apply/1"}}
+    class R:
+        status_code = 200
+        text = html
+    def fake_get(url, **k):
+        if "linkedin.com" in url:
+            return R()
+        if "search-v2" in url:
+            return _resp(200, _search_payload(jobs))
+        return _resp(200, details)
+    monkeypatch.setattr(requests, "get", fake_get)
+    job = J.fetch_job_auto("https://www.linkedin.com/jobs/view/4012345678", "k",
+                           "jsearch.p.rapidapi.com", "https://e/job-details")
+    assert job.description == "rich" and job.job_id == "4012345678"
 
 
 def test_public_login_wall_raises(monkeypatch):

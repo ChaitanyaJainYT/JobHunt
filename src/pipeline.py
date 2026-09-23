@@ -81,7 +81,9 @@ def run_apply(url: str, demo: bool = False, out: str | None = None,
     else:
         try:
             fetch = _ov.get("fetch_job", fetch_job_auto)
-            job = fetch(url, cfg.rapidapi_key, cfg.rapidapi_host, cfg.rapidapi_job_endpoint)
+            job = fetch(url, cfg.rapidapi_key, cfg.rapidapi_host, cfg.rapidapi_job_endpoint,
+                        search_endpoint=cfg.rapidapi_search_endpoint,
+                        country=cfg.rapidapi_country)
             job_id = job.job_id
         except Exception as e:
             print(f"\n[ERROR] Job fetch failed: {e}")
