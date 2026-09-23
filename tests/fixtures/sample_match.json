@@ -1,0 +1,6 @@
+{
+  "match_score": 75,
+  "matching_skills": ["python", "sql", "rest apis"],
+  "missing_skills": ["kubernetes", "aws"],
+  "core_requirements": ["python", "rest apis", "sql", "docker"]
+}
