@@ -19,6 +19,14 @@ python agent.py "https://www.linkedin.com/jobs/view/4012345678"
 python agent.py check-mail
 ```
 
+## Web UI (easiest)
+
+```bash
+python agent.py ui
+```
+
+Opens `http://127.0.0.1:8765` (localhost only, no extra packages). Paste a job URL → watch live progress → open the tailored PDF and the manual apply link. Also shows tracked applications with a direct **Open Google Sheet** link, a one-click Gmail check, and a **Console** card where you can type `doctor`, `check-mail [--days N] [--demo]`, or `apply <url> [--resume] [--demo]` (anything else is rejected — it never runs a shell; `setup` needs a real terminal). A **Dark/Light** toggle sits in the header (your OS theme is the default; choice is remembered). Long jobs run in the background; Google consent tabs open in your browser as usual on first run.
+
 ## Commands
 
 | Command | What it does |
@@ -52,7 +60,7 @@ Copy `.env.example` to `.env` (auto-created) or run `setup`.
 ## Prereqs
 
 1. Python 3.10+ (`python --version`).
-2. Tectonic (LaTeX, zero-config): Windows `winget install tectonic`, then reopen terminal. Verify with `python agent.py doctor`.
+2. Tectonic (LaTeX, zero-config): already bundled at `tools/tectonic/` — no install or PATH setup needed; the app finds it automatically (a system-wide `tectonic` on PATH is used if present instead). Verify with `python agent.py doctor`.
 3. Your base resume as `main.tex` in project root (a `main.tex.sample` is bundled for trial).
 4. Google (one-time): Google Cloud Console -> OAuth Desktop client -> download as `credentials.json`. First Sheets/Gmail run opens browser, saves `token.json` for later. All three are gitignored.
 

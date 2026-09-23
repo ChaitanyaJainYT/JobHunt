@@ -31,6 +31,11 @@ def main(argv=None) -> int:
         if cmd == "check-mail":
             from src.pipeline import run_check_mail_flow
             return run_check_mail_flow(days=int(getattr(ns, "days", 14)), demo=demo)
+        if cmd == "ui":
+            import ui as _ui
+            _ui.main(port=int(getattr(ns, "port", 8765) or 8765),
+                     open_browser=not getattr(ns, "no_browser", False))
+            return 0
 
         from src.cli import build_parser
         build_parser().print_help()

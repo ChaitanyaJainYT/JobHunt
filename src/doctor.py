@@ -29,12 +29,16 @@ def run_doctor() -> list[CheckResult]:
         "" if ok else "Install Python 3.10+ from https://www.python.org/downloads/",
     ))
 
-    # 2. tectonic
-    found = shutil.which("tectonic")
+    # 2. tectonic (bundled copy counts: no PATH setup needed)
+    from src.compiler import bundled_tectonic
+    bundled = bundled_tectonic()
+    found = str(bundled) if bundled is not None else shutil.which("tectonic")
     results.append(CheckResult(
-        "tectonic in PATH", bool(found),
-        found or "not found",
-        "" if found else "Windows: winget install tectonic  (or choco install tectonic). Then reopen terminal.",
+        "tectonic available", bool(found),
+        f"{found} (bundled)" if bundled is not None else (found or "not found"),
+        "" if found else ("Download tectonic-*-x86_64-pc-windows-msvc.zip from "
+                          "github.com/tectonic-typesetting/tectonic/releases and unpack "
+                          "tectonic.exe to tools/tectonic/."),
     ))
 
     # 3. base resume

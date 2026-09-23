@@ -67,11 +67,24 @@ def test_wizard_creates_env(tmp_path, monkeypatch):
 
 def test_doctor_reports_tectonic_missing(monkeypatch):
     import shutil
+    import src.compiler as Cp
     monkeypatch.setattr(shutil, "which", lambda _: None)
+    monkeypatch.setattr(Cp, "bundled_tectonic", lambda: None)
     results = run_doctor()
     tec = [r for r in results if "tectonic" in r.name][0]
     assert tec.ok is False
     assert "tectonic" in (tec.fix + tec.detail).lower()
+
+
+def test_doctor_accepts_bundled_tectonic(monkeypatch, tmp_path):
+    import shutil
+    import src.compiler as Cp
+    monkeypatch.setattr(shutil, "which", lambda _: None)
+    monkeypatch.setattr(Cp, "bundled_tectonic", lambda: tmp_path / "tectonic.exe")
+    results = run_doctor()
+    tec = [r for r in results if "tectonic" in r.name][0]
+    assert tec.ok is True
+    assert "bundled" in tec.detail
 
 
 def test_cli_bare_url_routes_to_apply():

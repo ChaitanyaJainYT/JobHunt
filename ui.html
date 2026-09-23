@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JobHunt — Job Application Assistant</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2430; --muted:#687182; --line:#e3e6eb;
+          --ok:#157f3d; --okbg:#e6f4ea; --bad:#b3261e; --badbg:#fdecea; --acc:#0b57d0; --accbg:#e8f0fe;
+          --header:#1c2430; --headerink:#fff; --input:#fff; --ghost:#eef1f5; --logbg:#101418; --logink:#c9e1ff; }
+  [data-theme="dark"] { --bg:#10141a; --card:#1a2029; --ink:#e7ecf3; --muted:#9aa4b2; --line:#2b333e;
+          --ok:#4cc38a; --okbg:#123626; --bad:#f28b82; --badbg:#3d1d1a; --acc:#8ab4f8; --accbg:#1e2f4d;
+          --header:#0b0e13; --headerink:#e7ecf3; --input:#232b36; --ghost:#2a323d; --logbg:#0d1117; --logink:#c9e1ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, "Segoe UI", Arial, sans-serif; }
+  header { background:var(--header); color:var(--headerink); padding:14px 22px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  header h1 { margin:0; font-size:19px; }
+  header p { margin:2px 0 0; font-size:13px; opacity:.75; }
+  #themeBtn { flex:0 0 auto; }
+  main { max-width:920px; margin:0 auto; padding:18px 16px 60px; }
+  section.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:16px; }
+  h2 { margin:0 0 12px; font-size:17px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  input[type=text], input[type=url], input[type=number] { flex:1 1 280px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:14px; background:var(--input); color:var(--ink); }
+  input[type=number] { flex:0 0 90px; }
+  input[type=checkbox] { accent-color:var(--acc); }
+  button { background:var(--acc); color:#fff; border:0; border-radius:8px; padding:10px 18px; font-size:14px; cursor:pointer; }
+  button:disabled { opacity:.55; cursor:wait; }
+  button.ghost { background:var(--ghost); color:var(--ink); }
+  label.chk { display:flex; gap:6px; align-items:center; font-size:13px; color:var(--muted); }
+  pre.log { background:var(--logbg); color:var(--logink); border:1px solid var(--line); border-radius:8px; padding:12px; max-height:260px; overflow:auto; font-size:12.5px; white-space:pre-wrap; }
+  .result { border:1px solid var(--line); border-left:5px solid var(--ok); border-radius:8px; padding:12px 14px; margin-top:12px; }
+  .result.err { border-left-color:var(--bad); }
+  .result a { color:var(--acc); }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12.5px; text-transform:uppercase; }
+  .score { display:inline-block; min-width:44px; text-align:center; font-weight:700; background:var(--accbg); color:var(--acc); border-radius:6px; padding:2px 6px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .skills { font-size:12.5px; color:var(--muted); }
+  .icon-link { color:var(--acc); display:inline-flex; align-items:center; padding:4px; border-radius:6px; }
+  .icon-link:hover { background:var(--accbg); }
+  .icon-link + .icon-link { margin-left:4px; }
+  .icon-link svg { width:17px; height:17px; display:block; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>JobHunt — Local Job Application Assistant</h1>
+    <p>Paste a job URL → tailored PDF + tracker. Nothing is ever auto-applied.</p>
+  </div>
+  <button id="themeBtn" class="ghost" onclick="toggleTheme()" title="Toggle dark / light mode">Dark</button>
+</header>
+<main>
+  <div id="staleBanner" style="display:none; background:#fdecea; color:#b3261e; border:1px solid #f5c6c0; border-radius:12px; padding:12px 16px; margin-bottom:16px;">
+    <b>Server is outdated.</b> This page is newer than the running backend (it serves the page from disk but lacks the new API routes).
+    Restart it: press <b>Ctrl+C</b> in the terminal, then run <b>python agent.py ui</b> again.
+  </div>
+
+
+  <section class="card">
+    <h2>New application</h2>
+    <div class="row">
+      <input id="url" type="url" placeholder="https://www.linkedin.com/jobs/view/…" autocomplete="off">
+      <label class="chk" title="Reuse saved job + match data, skip fetch and match calls"><input id="resume" type="checkbox"> resume</label>
+      <button id="applyBtn" onclick="startApply()">Prepare application</button>
+    </div>
+    <div id="applyStatus" class="muted" style="margin-top:8px"></div>
+    <pre id="applyLog" class="log" style="display:none"></pre>
+    <div id="applyResult"></div>
+  </section>
+
+  <section class="card">
+    <h2>Tracked applications
+      <button class="ghost" onclick="loadJobs()" style="padding:6px 12px">Refresh</button>
+      <a id="sheetLink" href="#" target="_blank" title="Open Google Sheet" style="display:none; font-size:13px; margin-left:8px; vertical-align:middle">Google Sheet <span class="icon-link" style="padding:0 2px; vertical-align:-3px"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M6 2.5v11M2.5 6h11M2.5 10h11"/></svg></span></a>
+    </h2>
+    <div id="jobs"><span class="muted">Loading…</span></div>
+  </section>
+
+  <section class="card">
+    <h2>Console</h2>
+    <div class="muted" style="margin-bottom:8px">Run <b>doctor</b>, <b>check-mail</b>, or <b>apply</b> here. Anything else is rejected — this is not a shell. Prefix <span style="font-family:monospace">python agent.py</span> optional.</div>
+    <div class="row" style="margin-bottom:8px">
+      <button class="ghost" onclick="fillConsole('doctor')" style="padding:6px 12px">doctor</button>
+      <button class="ghost" onclick="fillConsole('check-mail')" style="padding:6px 12px">check-mail</button>
+      <button class="ghost" onclick="fillConsole('help')" style="padding:6px 12px">help</button>
+    </div>
+    <div class="row">
+      <input id="consoleIn" type="text" placeholder='doctor  ·  check-mail --days 7  ·  apply "https://…"' autocomplete="off" onkeydown="if(event.key==='Enter')runConsole()">
+      <button onclick="runConsole()">Run</button>
+    </div>
+    <pre id="consoleLog" class="log" style="display:none; margin-top:10px"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Check Gmail replies</h2>
+    <div class="row">
+      <label class="muted">Last <input id="days" type="number" value="14" min="1" max="90"> days</label>
+      <button id="mailBtn" onclick="startMail()">Check mail</button>
+    </div>
+    <div id="mailStatus" class="muted" style="margin-top:8px"></div>
+    <pre id="mailLog" class="log" style="display:none"></pre>
+  </section>
+
+</main>
+<script>
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const j = await r.json().catch(() => ({error: "bad response"}));
+  if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+}
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+const ICON_PDF = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 1.5h4.5L12 5v9.5H4z"/><path d="M8.5 1.5V5H12"/><path d="M6 8.5h4M6 11h4"/></svg>`;
+const ICON_APPLY = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5H3.5v9h9V9.5"/><path d="M9.5 3.5h3v3"/><path d="M12.5 3.5 8 8"/></svg>`;
+const ICON_SHEET = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M6 2.5v11M2.5 6h11M2.5 10h11"/></svg>`;
+
+async function loadJobs() {
+  const box = document.getElementById("jobs");
+  try {
+    const {jobs} = await api("/api/jobs");
+    if (!jobs.length) { box.innerHTML = '<span class="muted">No applications yet — paste a URL above.</span>'; return; }
+    box.innerHTML = `<table><tr><th>Company</th><th>Role</th><th>Match</th><th>Links</th></tr>` +
+      jobs.map(j => `<tr><td><b>${esc(j.company)}</b><div class="skills">${esc((j.matching_skills||[]).join(", "))}</div></td>
+        <td>${esc(j.title)}${(j.missing_skills||[]).length ? `<div class="skills">missing: ${esc(j.missing_skills.join(", "))}</div>` : ""}</td>
+        <td>${j.match_score == null ? "—" : `<span class="score">${j.match_score}%</span>`}</td>
+        <td style="white-space:nowrap">${j.pdf_url ? `<a class="icon-link" href="${j.pdf_url}" target="_blank" title="Open tailored PDF" aria-label="Open tailored PDF">${ICON_PDF}</a>` : '<span class="muted" title="No PDF produced">—</span>'}${j.apply_link ? `<a class="icon-link" href="${esc(j.apply_link)}" target="_blank" title="Apply manually (opens job posting)" aria-label="Apply manually">${ICON_APPLY}</a>` : ""}</td></tr>`).join("") + `</table>`;
+  } catch (e) { box.innerHTML = `<span class="muted">Could not load jobs: ${esc(e.message)}</span>`; }
+}
+
+async function pollTask(tid, logEl, statusEl, onDone) {
+  let seen = 0;
+  logEl.style.display = "block";
+  while (true) {
+    await new Promise(r => setTimeout(r, 1500));
+    let t;
+    try { t = await api("/api/tasks/" + tid); }
+    catch (e) { statusEl.textContent = "Connection lost: " + e.message; return; }
+    const fresh = t.log.slice(seen); seen = t.log.length;
+    if (fresh.length) { logEl.textContent += fresh.join("\n") + "\n"; logEl.scrollTop = logEl.scrollHeight; }
+    if (t.status === "running") { statusEl.textContent = "Working… (" + t.log.length + " lines)"; continue; }
+    statusEl.textContent = t.status === "done" ? "Finished." : "Failed.";
+    onDone(t);
+    return;
+  }
+}
+
+async function startApply() {
+  const url = document.getElementById("url").value.trim();
+  const resume = document.getElementById("resume").checked;
+  const btn = document.getElementById("applyBtn");
+  document.getElementById("applyResult").innerHTML = "";
+  document.getElementById("applyLog").textContent = "";
+  if (!url) { document.getElementById("applyStatus").textContent = "Paste a job URL first."; return; }
+  btn.disabled = true;
+  try {
+    const {task_id} = await api("/api/apply", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({url, resume})});
+    document.getElementById("applyStatus").textContent = "Working… (a Google consent tab may open on first run)";
+    await pollTask(task_id, document.getElementById("applyLog"), document.getElementById("applyStatus"), t => {
+      const box = document.getElementById("applyResult");
+      if (t.status !== "done") { box.innerHTML = `<div class="result err"><b>${esc(failDetail(t).split("\n")[0])}</b>${t.result && t.result.trace ? `<pre class="log" style="margin-top:8px">${esc(t.result.trace.join("\n"))}</pre>` : ""}</div>`; return; }
+      const j = (t.result||{}).job;
+      if (!j) { box.innerHTML = `<div class="result err">Finished but no job data found (exit ${(t.result||{}).exit_code}). Check the log above.</div>`; return; }
+      box.innerHTML = `<div class="result"><b>${esc(j.company)}</b> — ${esc(j.title)}
+        ${j.match_score == null ? "" : ` <span class="score">${j.match_score}%</span>`}<br>
+        ${j.pdf_url ? `<a href="${j.pdf_url}" target="_blank"><b>Open tailored PDF</b></a>` : "<b>No PDF produced</b> — see log."}
+        ${j.apply_link ? ` · <a href="${esc(j.apply_link)}" target="_blank">Apply manually here</a>` : ""}
+        <div class="muted">Logged to your Google Sheet as “Ready to Apply”.</div></div>`;
+      loadJobs();
+    });
+  } catch (e) { document.getElementById("applyStatus").textContent = "Error: " + e.message; }
+  finally { btn.disabled = false; }
+}
+
+async function startMail() {
+  const days = document.getElementById("days").value || 14;
+  const btn = document.getElementById("mailBtn");
+  document.getElementById("mailLog").textContent = "";
+  btn.disabled = true;
+  try {
+    const {task_id} = await api("/api/check-mail", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({days: Number(days)})});
+    document.getElementById("mailStatus").textContent = "Scanning Gmail…";
+    await pollTask(task_id, document.getElementById("mailLog"), document.getElementById("mailStatus"), () => loadJobs());
+  } catch (e) { document.getElementById("mailStatus").textContent = "Error: " + e.message; }
+  finally { btn.disabled = false; }
+}
+
+async function loadSheet() {
+  try {
+    const {sheet_url} = await api("/api/sheet");
+    if (sheet_url) {
+      const a = document.getElementById("sheetLink");
+      a.href = sheet_url; a.style.display = "inline";
+    }
+  } catch (e) { /* sheet not configured — link stays hidden */ }
+}
+
+function fillConsole(cmd) {
+  const el = document.getElementById("consoleIn");
+  el.value = cmd; el.focus();
+}
+
+function clog(text) {
+  const log = document.getElementById("consoleLog");
+  log.style.display = "block";
+  log.textContent += text + "\n";
+  log.scrollTop = log.scrollHeight;
+}
+
+async function runConsole() {
+  const el = document.getElementById("consoleIn");
+  const cmd = el.value.trim();
+  if (!cmd) return;
+  clog("$ " + cmd);
+  el.value = "";
+  let res;
+  try {
+    res = await api("/api/console", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({command: cmd})});
+  } catch (e) { clog("Error: " + e.message); return; }
+  if (res.error) { clog("Error: " + res.error); return; }
+  if (res.output) { clog(res.output); return; }
+  if (res.task_id) {
+    const log = document.getElementById("consoleLog");
+    let shown = 0;
+    while (true) {
+      await new Promise(r => setTimeout(r, 1500));
+      let t;
+      try { t = await api("/api/tasks/" + res.task_id); }
+      catch (e) { clog("Connection lost: " + e.message); return; }
+      const fresh = t.log.slice(shown);
+      shown = t.log.length;
+      if (fresh.length) { log.textContent += fresh.join("\n") + "\n"; log.scrollTop = log.scrollHeight; }
+      if (t.status !== "running") {
+        if (t.status !== "done") clog(failDetail(t));
+        else if ((t.result || {}).exit_code) clog("(exit " + t.result.exit_code + ")");
+        if (cmd.startsWith("check-mail") || cmd.includes("apply")) loadJobs();
+        return;
+      }
+    }
+  }
+}
+
+async function checkVersion() {
+  try {
+    const {version} = await api("/api/version");
+    if (version !== 2) throw new Error("mismatch");
+  } catch (e) {
+    document.getElementById("staleBanner").style.display = "block";
+  }
+}
+
+function failDetail(t) {
+  const r = t.result || {};
+  let s = "Failed: " + (r.error || "unknown");
+  if (r.trace && r.trace.length) s += "\n" + r.trace.join("\n");
+  return s;
+}
+
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("jh-theme", t); } catch (e) { /* private mode */ }
+  const b = document.getElementById("themeBtn");
+  if (b) b.textContent = t === "dark" ? "Light" : "Dark";
+}
+function toggleTheme() {
+  setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+}
+(function initTheme() {
+  let t = null;
+  try { t = localStorage.getItem("jh-theme"); } catch (e) { /* private mode */ }
+  if (!t && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches) t = "dark";
+  setTheme(t || "light");
+})();
+
+loadJobs(); loadSheet(); checkVersion();
+</script>
+</body>
+</html>

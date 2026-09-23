@@ -12,18 +12,39 @@ class LatexCompileError(Exception):
         self.log = log
 
 
+def bundled_tectonic() -> Path | None:
+    """Project-local copy (tools/tectonic/tectonic[.exe]). Gitignored, zero setup."""
+    from src.utils import PROJECT_ROOT
+    for name in ("tectonic.exe", "tectonic"):
+        p = PROJECT_ROOT / "tools" / "tectonic" / name
+        if p.is_file():
+            return p
+    return None
+
+
+def find_tectonic() -> str | None:
+    """Bundled copy first, then system PATH. Returns executable path or None."""
+    b = bundled_tectonic()
+    if b is not None:
+        return str(b)
+    return shutil.which("tectonic")
+
+
 def _tectonic_cmd(tex_path: Path, outdir: Path) -> list[str]:
-    return ["tectonic", "--outdir", str(outdir), str(tex_path)]
+    exe = find_tectonic() or "tectonic"
+    return [exe, "--outdir", str(outdir), str(tex_path)]
 
 
 def compile_tex(tex_path: Path, timeout: int = 600) -> Path:
     # NOTE: the very first tectonic run downloads the LaTeX bundle (~100 files)
     # and can take several minutes; later runs finish in seconds (cache warm).
-    exe = shutil.which("tectonic")
+    exe = find_tectonic()
     if not exe:
         raise LatexCompileError(
-            "tectonic not found in PATH. Install: winget install tectonic "
-            "(or https://tectonic-typesetting.github.io/en-US/), then reopen terminal. "
+            "tectonic not found (no tools/tectonic/ copy, not in PATH). "
+            "Download tectonic-*-x86_64-pc-windows-msvc.zip from "
+            "https://github.com/tectonic-typesetting/tectonic/releases, unpack "
+            "tectonic.exe to tools/tectonic/, and retry. "
             f"Your .tex is preserved at {tex_path}."
         )
     outdir = tex_path.parent

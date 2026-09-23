@@ -50,8 +50,23 @@ def test_compile_success(tmp_path, monkeypatch):
 
 def test_compile_missing_tectonic(tmp_path, monkeypatch):
     monkeypatch.setattr("shutil.which", lambda _: None)
+    monkeypatch.setattr(Cp, "bundled_tectonic", lambda: None)
     with pytest.raises(Cp.LatexCompileError, match="tectonic-typesetting"):
         Cp.compile_tex(tmp_path / "R.tex")
+
+
+def test_find_tectonic_prefers_bundled(tmp_path, monkeypatch):
+    fake = tmp_path / "tectonic.exe"
+    fake.write_bytes(b"x")
+    monkeypatch.setattr(Cp, "bundled_tectonic", lambda: fake)
+    monkeypatch.setattr("shutil.which", lambda _: "C:/other/tectonic.exe")
+    assert Cp.find_tectonic() == str(fake)
+
+
+def test_find_tectonic_falls_back_to_path(tmp_path, monkeypatch):
+    monkeypatch.setattr(Cp, "bundled_tectonic", lambda: None)
+    monkeypatch.setattr("shutil.which", lambda _: "C:/other/tectonic.exe")
+    assert Cp.find_tectonic() == "C:/other/tectonic.exe"
 
 
 def test_self_heal_retries(tmp_path, monkeypatch):
