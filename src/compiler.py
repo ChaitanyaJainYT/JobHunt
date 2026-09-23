@@ -16,7 +16,9 @@ def _tectonic_cmd(tex_path: Path, outdir: Path) -> list[str]:
     return ["tectonic", "--outdir", str(outdir), str(tex_path)]
 
 
-def compile_tex(tex_path: Path, timeout: int = 120) -> Path:
+def compile_tex(tex_path: Path, timeout: int = 600) -> Path:
+    # NOTE: the very first tectonic run downloads the LaTeX bundle (~100 files)
+    # and can take several minutes; later runs finish in seconds (cache warm).
     exe = shutil.which("tectonic")
     if not exe:
         raise LatexCompileError(
@@ -46,9 +48,10 @@ def compile_tex(tex_path: Path, timeout: int = 120) -> Path:
     return pdf
 
 
-def compile_with_heal(tex_path: Path, api_key: str = "", model: str = "gemini-1.5-flash",
-                      groq_key: str = "", max_retries: int = 2,
-                      timeout: int = 120) -> Path:
+def compile_with_heal(tex_path: Path, api_key: str = "", model: str = "gemini-3.6-flash",
+                      groq_key: str = "", groq_model: str = "openai/gpt-oss-120b",
+                      max_retries: int = 2,
+                      timeout: int = 600) -> Path:
     """Try compile; on failure ask LLM to fix syntax, retry. Preserves .tex + .log."""
     from src import llm
     last: LatexCompileError | None = None
@@ -61,6 +64,7 @@ def compile_with_heal(tex_path: Path, api_key: str = "", model: str = "gemini-1.
                 raise
             broken = tex_path.read_text(encoding="utf-8")
             fixed = llm.fix_latex(broken, e.log or str(e),
-                                  api_key=api_key, model=model, groq_key=groq_key)
+                                  api_key=api_key, model=model,
+                                  groq_key=groq_key, groq_model=groq_model)
             tex_path.write_text(fixed, encoding="utf-8")
     raise last  # pragma: no cover

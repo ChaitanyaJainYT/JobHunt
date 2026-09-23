@@ -26,8 +26,9 @@ BASE TEX:
 
 def tailor_resume(base_tex: str, title: str, company: str,
                   missing: list[str], reqs: list[str],
-                  api_key: str = "", model: str = "gemini-1.5-flash",
-                  groq_key: str = "") -> str:
+                  api_key: str = "", model: str = "gemini-3.6-flash",
+                  groq_key: str = "",
+                  groq_model: str = "openai/gpt-oss-120b") -> str:
     if "\\documentclass" not in base_tex:
         raise ValueError("Base .tex looks invalid (missing \\documentclass). Check main.tex.")
     prompt = TAILOR_PROMPT_V2.format(
@@ -36,7 +37,8 @@ def tailor_resume(base_tex: str, title: str, company: str,
         missing=", ".join(missing[:10]) or "-",
         tex=base_tex[:15000],
     )
-    out = llm.complete_text(prompt, api_key=api_key, model=model, groq_key=groq_key)
+    out = llm.complete_text(prompt, api_key=api_key, model=model,
+                              groq_key=groq_key, groq_model=groq_model)
     if "\\documentclass" not in out:
         raise ValueError("LLM did not return a valid .tex document. Retry or use --demo.")
     return out

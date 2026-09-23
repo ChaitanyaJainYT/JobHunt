@@ -107,7 +107,19 @@ def _open_worksheet(sheet_id: str, creds_file: str, client=None):
     except SheetsError:
         raise
     except Exception as e:
-        raise SheetsError(f"Sheets auth/open failed: {e}. Run 'python agent.py doctor'.") from e
+        raise SheetsError(f"Sheets auth/open failed: {e}. {oauth_denied_hint(str(e))}"
+                          "Run 'python agent.py doctor'.") from e
+
+
+def oauth_denied_hint(msg: str) -> str:
+    """Guidance for the 'app not verified / access_denied' testing-mode block."""
+    if "access_denied" in msg.lower() or "verification" in msg.lower():
+        return ("If the browser showed 'Access blocked: app has not completed the Google "
+                "verification process' (Error 403: access_denied), your OAuth app is in Testing "
+                "mode and your Gmail is not listed as a tester. Fix (2 min, one-time): Google Cloud "
+                "Console -> your project -> APIs & Services -> OAuth consent screen -> Audience -> "
+                "under 'Test users' click 'Add users' -> add your Gmail address -> Save. Then re-run. ")
+    return ""
 
 
 def log_application(job, match, pdf_path: str, apply_url: str,

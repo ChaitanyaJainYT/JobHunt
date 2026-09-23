@@ -57,7 +57,7 @@ def test_wizard_creates_env(tmp_path, monkeypatch):
     ex.write_text("GEMINI_API_KEY=\n", encoding="utf-8")
     monkeypatch.setattr(C, "ENV_PATH", env)
     monkeypatch.setattr(C, "ENV_EXAMPLE", ex)
-    answers = iter(["g-wiz", "", "", "r-wiz", "", "", "s-wiz", ""])
+    answers = iter(["g-wiz", "", "", "", "r-wiz", "", "", "s-wiz", ""])
     monkeypatch.setattr("builtins.input", lambda _="": next(answers))
     cfg = C.run_setup_wizard()
     assert env.exists()

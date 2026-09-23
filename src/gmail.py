@@ -40,11 +40,12 @@ class Email:
 
 
 def classify_email(subject: str, body: str, api_key: str = "",
-                   model: str = "gemini-1.5-flash", groq_key: str = "") -> tuple[str, float]:
+                   model: str = "gemini-3.6-flash", groq_key: str = "",
+                   groq_model: str = "openai/gpt-oss-120b") -> tuple[str, float]:
     data = llm.complete_json(
         CLASSIFY_PROMPT_V4.format(labels="/".join(LABELS),
                                   subject=subject[:300], body=body[:4000]),
-        api_key=api_key, model=model, groq_key=groq_key)
+        api_key=api_key, model=model, groq_key=groq_key, groq_model=groq_model)
     label = str(data.get("label", "Other")).strip()
     if label not in LABELS:
         # fuzzy match
@@ -110,34 +111,41 @@ def build_gmail_service(creds_file: str = "credentials.json"):
         from googleapiclient.discovery import build
     except ImportError as e:
         raise GmailError("Gmail libs missing. Run: pip install -r requirements.txt") from e
+    from src.sheets import oauth_denied_hint
     scopes = ["https://www.googleapis.com/auth/gmail.readonly"]
     root = Path(__file__).resolve().parent.parent
     cred_path = root / creds_file if not Path(creds_file).is_absolute() else Path(creds_file)
     tok_path = root / "token.json"
-    creds = None
-    if tok_path.exists():
-        creds = Credentials.from_authorized_user_file(str(tok_path), scopes)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            if not cred_path.exists():
-                raise GmailError(f"Google credentials not found: {cred_path}.")
-            flow = InstalledAppFlow.from_client_secrets_file(str(cred_path), scopes)
-            creds = flow.run_local_server(port=0)
-        # merge with existing token scopes if present
-        try:
-            prev = json.loads(tok_path.read_text(encoding="utf-8")) if tok_path.exists() else {}
-            prev.update(json.loads(creds.to_json()))
-            tok_path.write_text(json.dumps(prev), encoding="utf-8")
-        except Exception:
-            tok_path.write_text(creds.to_json(), encoding="utf-8")
-    return build("gmail", "v1", credentials=creds)
+    try:
+        creds = None
+        if tok_path.exists():
+            creds = Credentials.from_authorized_user_file(str(tok_path), scopes)
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                if not cred_path.exists():
+                    raise GmailError(f"Google credentials not found: {cred_path}.")
+                flow = InstalledAppFlow.from_client_secrets_file(str(cred_path), scopes)
+                creds = flow.run_local_server(port=0)
+            # merge with existing token scopes if present
+            try:
+                prev = json.loads(tok_path.read_text(encoding="utf-8")) if tok_path.exists() else {}
+                prev.update(json.loads(creds.to_json()))
+                tok_path.write_text(json.dumps(prev), encoding="utf-8")
+            except Exception:
+                tok_path.write_text(creds.to_json(), encoding="utf-8")
+        return build("gmail", "v1", credentials=creds)
+    except GmailError:
+        raise
+    except Exception as e:
+        raise GmailError(f"Gmail auth failed: {e}. {oauth_denied_hint(str(e))}") from e
 
 
 def run_check_mail(companies: list[str], sheet_id: str, creds_file: str = "credentials.json",
-                   days: int = 14, api_key: str = "", model: str = "gemini-1.5-flash",
-                   groq_key: str = "", seen_path: Path = SEEN_DEFAULT,
+                   days: int = 14, api_key: str = "", model: str = "gemini-3.6-flash",
+                   groq_key: str = "", groq_model: str = "openai/gpt-oss-120b",
+                   seen_path: Path = SEEN_DEFAULT,
                    email_fetcher=None, service=None, sheet_client=None) -> list[dict]:
     """Fetch+classify+update. Returns per-email result dicts. Testable via email_fetcher."""
     from src import sheets
@@ -164,7 +172,8 @@ def run_check_mail(companies: list[str], sheet_id: str, creds_file: str = "crede
             if em.msg_id in seen:
                 continue
             seen.add(em.msg_id)
-            label, conf = classify_email(em.subject, em.body, api_key, model, groq_key)
+            label, conf = classify_email(em.subject, em.body, api_key, model,
+                                           groq_key, groq_model)
             updated = False
             if label not in SKIP_LABELS and conf >= 0.6:
                 try:

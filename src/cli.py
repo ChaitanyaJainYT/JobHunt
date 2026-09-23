@@ -24,6 +24,8 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--url", "-u", help="Job posting URL.")
     a.add_argument("url_pos", nargs="?", help="Job URL (positional).")
     a.add_argument("--out", help="Custom output dir (default: output/<Company>_<JobId>/).")
+    a.add_argument("--resume", action="store_true",
+                   help="Reuse saved job.json+match.json (skips fetch+match LLM calls).")
     a.add_argument("--demo", dest="demo", action="store_true", help="Offline trial.")
 
     c = sub.add_parser("check-mail", help="Scan Gmail for employer replies, update sheet.")

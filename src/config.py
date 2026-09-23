@@ -24,7 +24,8 @@ class ConfigError(Exception):
 class AppConfig:
     gemini_api_key: str = ""
     groq_api_key: str = ""
-    llm_model: str = "gemini-1.5-flash"
+    llm_model: str = "gemini-3.6-flash"
+    groq_model: str = "openai/gpt-oss-120b"
     rapidapi_key: str = ""
     rapidapi_host: str = "jsearch.p.rapidapi.com"
     rapidapi_job_endpoint: str = "https://jsearch.p.rapidapi.com/job-details"
@@ -40,8 +41,9 @@ class AppConfig:
 # key in .env -> (attr, required_for_real_run, prompt_text)
 _MANAGED_KEYS: list[tuple[str, str, bool, str]] = [
     ("GEMINI_API_KEY", "gemini_api_key", True, "Gemini API key (https://aistudio.google.com/app/apikey)"),
-    ("GROQ_API_KEY", "groq_api_key", False, "Groq API key (optional, Enter to skip)"),
-    ("LLM_MODEL", "llm_model", False, "LLM model [gemini-1.5-flash]"),
+    ("GROQ_API_KEY", "groq_api_key", False, "Groq API key (optional fallback, Enter to skip)"),
+    ("GROQ_MODEL", "groq_model", False, "Groq model [openai/gpt-oss-120b]"),
+    ("LLM_MODEL", "llm_model", False, "LLM model [gemini-3.6-flash]"),
     ("RAPIDAPI_KEY", "rapidapi_key", True, "RapidAPI key (https://rapidapi.com, subscribe JSearch free)"),
     ("RAPIDAPI_HOST", "rapidapi_host", False, "RapidAPI host [jsearch.p.rapidapi.com]"),
     ("RAPIDAPI_JOB_ENDPOINT", "rapidapi_job_endpoint", False, "RapidAPI job endpoint URL"),
@@ -105,7 +107,9 @@ def run_setup_wizard() -> AppConfig:
         if answer:
             values[env_key] = answer
         elif env_key == "LLM_MODEL" and not values.get(env_key):
-            values[env_key] = "gemini-1.5-flash"
+            values[env_key] = "gemini-3.6-flash"
+        elif env_key == "GROQ_MODEL" and not values.get(env_key):
+            values[env_key] = "openai/gpt-oss-120b"
         elif env_key == "RAPIDAPI_HOST" and not values.get(env_key):
             values[env_key] = "jsearch.p.rapidapi.com"
         elif env_key == "RAPIDAPI_JOB_ENDPOINT" and not values.get(env_key):
@@ -126,7 +130,8 @@ def _from_values(values: dict[str, str], demo: bool) -> AppConfig:
     return AppConfig(
         gemini_api_key=get("GEMINI_API_KEY"),
         groq_api_key=get("GROQ_API_KEY"),
-        llm_model=get("LLM_MODEL", "gemini-1.5-flash"),
+        llm_model=get("LLM_MODEL", "gemini-3.6-flash"),
+        groq_model=get("GROQ_MODEL", "openai/gpt-oss-120b"),
         rapidapi_key=get("RAPIDAPI_KEY"),
         rapidapi_host=get("RAPIDAPI_HOST", "jsearch.p.rapidapi.com"),
         rapidapi_job_endpoint=get("RAPIDAPI_JOB_ENDPOINT", "https://jsearch.p.rapidapi.com/job-details"),

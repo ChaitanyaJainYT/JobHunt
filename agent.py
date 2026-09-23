@@ -26,7 +26,8 @@ def main(argv=None) -> int:
             return print_doctor(run_doctor())
         if cmd == "apply":
             from src.pipeline import run_apply
-            return run_apply(ns.url, demo=demo, out=getattr(ns, "out", None))
+            return run_apply(ns.url, demo=demo, out=getattr(ns, "out", None),
+                             resume=bool(getattr(ns, "resume", False)))
         if cmd == "check-mail":
             from src.pipeline import run_check_mail_flow
             return run_check_mail_flow(days=int(getattr(ns, "days", 14)), demo=demo)

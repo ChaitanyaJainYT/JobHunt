@@ -47,14 +47,16 @@ def read_base_resume(explicit: str | Path | None = None) -> tuple[str, Path]:
 
 
 def analyze_match(job_description: str, resume_tex: str,
-                  api_key: str = "", model: str = "gemini-1.5-flash",
-                  groq_key: str = "") -> MatchResult:
+                  api_key: str = "", model: str = "gemini-3.6-flash",
+                  groq_key: str = "",
+                  groq_model: str = "openai/gpt-oss-120b") -> MatchResult:
     if not job_description or not job_description.strip():
         raise ValueError("Empty job description. The posting may be expired or fetch failed.")
     if not resume_tex or not resume_tex.strip():
         raise ValueError("Empty resume text. Check main.tex.")
     prompt = MATCH_PROMPT_V1.format(jd=job_description[:12000], resume=resume_tex[:15000])
-    data = llm.complete_json(prompt, api_key=api_key, model=model, groq_key=groq_key)
+    data = llm.complete_json(prompt, api_key=api_key, model=model,
+                               groq_key=groq_key, groq_model=groq_model)
     try:
         score = int(data.get("match_score", 0))
     except (TypeError, ValueError):

@@ -23,8 +23,19 @@ def _demo_job(url: str) -> dict:
                 "apply_link": url, "job_id": "demo123", "source_url": url}
 
 
+def _find_existing_job_dir(job_id: str) -> Path | None:
+    """Find output/*_<job_id>/ from a previous run (for --resume)."""
+    from src.utils import OUTPUT_ROOT
+    if not OUTPUT_ROOT.exists():
+        return None
+    cands = [d for d in OUTPUT_ROOT.iterdir()
+             if d.is_dir() and d.name.endswith(f"_{job_id}")]
+    return sorted(cands)[0] if cands else None
+
+
 def run_apply(url: str, demo: bool = False, out: str | None = None,
-              cfg=None, sheet_client=None, _overrides: dict | None = None) -> int:
+              cfg=None, sheet_client=None, _overrides: dict | None = None,
+              resume: bool = False) -> int:
     t0 = time.time()
     _ov = _overrides or {}
     try:
@@ -34,11 +45,26 @@ def run_apply(url: str, demo: bool = False, out: str | None = None,
         return 2
 
     from src.utils import ensure_output_dir, get_logger
-    from src.job_api import Job, JobFetchError, fetch_job, parse_job_id, save_job
+    from src.job_api import Job, JobFetchError, fetch_job_auto, parse_job_id, save_job
     from src.matcher import MatchResult, analyze_match, read_base_resume, save_match, summary_line
     from src.tailor import save_tailored, tailor_resume
     from src.compiler import LatexCompileError, compile_with_heal
     from src import sheets
+
+    # --- 0. Resume shortcut: reuse saved job.json + match.json ---
+    resumed_job = resumed_match = None
+    if resume and not demo and out is None:
+        try:
+            rid = parse_job_id(url)
+            rdir = _find_existing_job_dir(rid)
+            if rdir and (rdir / "job.json").exists() and (rdir / "match.json").exists():
+                resumed_job = json.loads((rdir / "job.json").read_text(encoding="utf-8"))
+                resumed_match = json.loads((rdir / "match.json").read_text(encoding="utf-8"))
+                print(f"[INFO] --resume: reusing {rdir.name}/job.json + match.json (no fetch/match calls).")
+            else:
+                print("[INFO] --resume: no saved job.json+match.json found, running full flow.")
+        except Exception as e:
+            print(f"[INFO] --resume unavailable ({e}), running full flow.")
 
     # --- 1. Job ---
     if demo:
@@ -47,9 +73,14 @@ def run_apply(url: str, demo: bool = False, out: str | None = None,
         job = _J(jd["title"], jd["company"], jd["description"],
                  jd.get("apply_link", url), jd.get("job_id", "demo123"), url)
         job_id = job.job_id
+    elif resumed_job is not None:
+        job = Job(resumed_job["title"], resumed_job["company"], resumed_job["description"],
+                  resumed_job.get("apply_link", url), resumed_job.get("job_id", ""),
+                  resumed_job.get("source_url", url))
+        job_id = job.job_id
     else:
         try:
-            fetch = _ov.get("fetch_job", fetch_job)
+            fetch = _ov.get("fetch_job", fetch_job_auto)
             job = fetch(url, cfg.rapidapi_key, cfg.rapidapi_host, cfg.rapidapi_job_endpoint)
             job_id = job.job_id
         except Exception as e:
@@ -83,10 +114,14 @@ def run_apply(url: str, demo: bool = False, out: str | None = None,
             mdata = json.loads((FIXTURES / "sample_match.json").read_text(encoding="utf-8"))
             match = MatchResult(mdata["match_score"], mdata["matching_skills"],
                                 mdata["missing_skills"], mdata["core_requirements"])
+        elif resumed_match is not None:
+            match = MatchResult(resumed_match["match_score"], resumed_match["matching_skills"],
+                                resumed_match["missing_skills"], resumed_match["core_requirements"])
         else:
             fn = _ov.get("analyze_match", analyze_match)
             match = fn(job.description, base_tex, api_key=cfg.gemini_api_key,
-                       model=cfg.llm_model, groq_key=cfg.groq_api_key)
+                       model=cfg.llm_model, groq_key=cfg.groq_api_key,
+                       groq_model=cfg.groq_model)
         save_match(match, folder)
     except Exception as e:
         print(f"\n[ERROR] Skill match failed: {e}")
@@ -105,7 +140,8 @@ def run_apply(url: str, demo: bool = False, out: str | None = None,
             fn = _ov.get("tailor_resume", tailor_resume)
             tex = fn(base_tex, job.title, job.company, match.missing_skills,
                      match.core_requirements, api_key=cfg.gemini_api_key,
-                     model=cfg.llm_model, groq_key=cfg.groq_api_key)
+                     model=cfg.llm_model, groq_key=cfg.groq_api_key,
+                     groq_model=cfg.groq_model)
         tex_path = save_tailored(tex, folder, job.company)
     except Exception as e:
         print(f"\n[ERROR] Resume tailor failed: {e}")
@@ -123,7 +159,7 @@ def run_apply(url: str, demo: bool = False, out: str | None = None,
         else:
             fn = _ov.get("compile_with_heal", compile_with_heal)
             pdf = fn(tex_path, api_key=cfg.gemini_api_key, model=cfg.llm_model,
-                     groq_key=cfg.groq_api_key)
+                     groq_key=cfg.groq_api_key, groq_model=cfg.groq_model)
             pdf_display = str(pdf)
             pdf_ok = True
     except LatexCompileError as e:
@@ -227,7 +263,7 @@ def run_check_mail_flow(days: int = 14, demo: bool = False, cfg=None,
         return 3
     G.run_check_mail(companies, cfg.google_sheet_id, cfg.google_credentials_file,
                      days=days, api_key=cfg.gemini_api_key, model=cfg.llm_model,
-                     groq_key=cfg.groq_api_key,
+                     groq_key=cfg.groq_api_key, groq_model=cfg.groq_model,
                      seen_path=seen_path or G.SEEN_DEFAULT,
                      email_fetcher=email_fetcher, sheet_client=sheet_client)
     return 0

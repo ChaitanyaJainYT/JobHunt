@@ -39,7 +39,8 @@ Copy `.env.example` to `.env` (auto-created) or run `setup`.
 | Key | Required | Where to get |
 |---|---|---|
 | `GEMINI_API_KEY` (or `GROQ_API_KEY`) | yes (one) | https://aistudio.google.com/app/apikey |
-| `LLM_MODEL` | no | default `gemini-1.5-flash` |
+| `GROQ_API_KEY` / `GROQ_MODEL` | no | Free at https://console.groq.com — auto-used when Gemini hits quota |
+| `LLM_MODEL` | no | default `gemini-3.6-flash` |
 | `RAPIDAPI_KEY` | yes | https://rapidapi.com, subscribe JSearch free tier |
 | `RAPIDAPI_HOST` | no | default `jsearch.p.rapidapi.com` |
 | `RAPIDAPI_JOB_ENDPOINT` | no | default `https://jsearch.p.rapidapi.com/job-details` |
@@ -64,7 +65,9 @@ Per job: `output/<Company>_<JobId>/job.json`, `match.json`, `<Company>_Resume.te
 - `tectonic not found`: install above, reopen terminal, `doctor` must show PASS.
 - `tectonic failed ... .log`: LLM broke LaTeX; agent auto-retries twice with fix prompt, else preserves `.tex` + `.tectonic.log` and still logs Sheet with `PDF: FAILED`. Manual: `tectonic --outdir <folder> <file>.tex`.
 - `API key not valid (Gemini)`: `setup` again, check aistudio key.
+- `LLM quota exceeded (429)`: free-tier budget hit. Small calls may still pass; big tailor calls fail first. Wait a few minutes and retry with `--resume` (reuses saved match, costs 1 call). For a permanent cushion, add a free `GROQ_API_KEY` (console.groq.com) — the app auto-falls-back to Groq on Gemini quota errors.
 - `Missing GOOGLE_SHEET_ID` / OAuth: `doctor` shows exact fix; `--demo` bypasses.
+- Browser shows `Access blocked: app has not completed verification` (Error 403: access_denied): your OAuth app is in Testing mode and your Gmail isn't a tester. Fix (one-time): Cloud Console -> your project -> APIs & Services -> OAuth consent screen -> Audience -> Test users -> Add users -> add your Gmail -> Save. Then re-run; no need to re-download credentials.json.
 - Gmail spam overwriting status: never happens - `Marketing/Spam`/`Other`/low-confidence never update Sheet; reruns skip seen IDs via `output/.seen_mail.json`.
 
 ## Tests

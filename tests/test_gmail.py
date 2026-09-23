@@ -69,7 +69,7 @@ def test_seen_ids_skipped(monkeypatch, tmp_path):
 
 def test_truncates_long_body(monkeypatch):
     captured = {}
-    def fake(prompt, api_key="", model="", groq_key=""):
+    def fake(prompt, api_key="", model="", groq_key="", **_k):
         captured["len"] = len(prompt)
         return {"label": "Other", "confidence": 0.5}
     monkeypatch.setattr(llm, "complete_json", fake)

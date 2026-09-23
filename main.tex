@@ -1,0 +1,129 @@
+\documentclass[10pt, a4paper]{article}
+
+% Packages
+\usepackage[left=0.5in, right=0.5in, top=0.5in, bottom=0.5in]{geometry}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{fontawesome5}
+\usepackage{xcolor}
+
+% Color definitions
+\definecolor{primary}{RGB}{0, 73, 118} 
+
+% Formatting sections
+\titleformat{\section}{\Large\bfseries\color{primary}}{}{0em}{}[\titlerule]
+\titlespacing{\section}{0pt}{10pt}{5pt}
+
+% Hyperlink setup
+\hypersetup{
+    colorlinks=true,
+    linkcolor=primary,
+    filecolor=primary,      
+    urlcolor=primary,
+}
+
+% Custom commands
+\newcommand{\resumeItem}[1]{\item\small{#1 \vspace{-2pt}}}
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-1pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-5pt}
+}
+
+\begin{document}
+\pagestyle{empty}
+
+% ---------- HEADER ----------
+\begin{center}
+    {\Huge \textbf{Chaitanya Jain}} \\ \vspace{4mm}
+    {\large \textbf{Data Platform Engineer}} \\ \vspace{2mm}
+    \small
+    \faMapMarker \ Gurugram, India \quad
+    \faPhone \ +91 8643050309 \quad
+    \faEnvelope \ \href{mailto:c.jain.official@gmail.com}{c.jain.official@gmail.com} \\ \vspace{1mm}
+    \faLinkedin \ \href{https://www.linkedin.com/in/chaitanya-jain-8967412}{linkedin.com/in/chaitanya-jain-8967412} \quad
+    \faGithub \ \href{https://github.com/Chaitanya20044}{github.com/Chaitanya20044}
+\end{center}
+
+% ---------- SUMMARY ----------
+\section*{Summary}
+\small{Associate Data Engineer with a strong foundation in computer science and software development. Driven by a "learn by doing" philosophy, with hands-on experience building scalable data pipelines, implementing automation, and utilizing modern data architectures like the Medallion architecture and Data Lakehouse. Proven ability to quickly adapt to new tools and technologies across both personal and official projects.}
+
+% ---------- EXPERIENCE ----------
+\section*{Experience}
+\begin{itemize}[leftmargin=0.15in, label={}]
+
+  \resumeSubheading
+    {NAB Innovation Center India (National Australia Bank)}{Gurgaon, India}
+    {Data Engineer}{08/2024 -- Present}
+    \begin{itemize}[leftmargin=0.15in, label=\textbullet]
+        \resumeItem{\textbf{Awarded NAB Star Award} for automating the migration of ETL jobs and pipelines from classic clusters to \textbf{Databricks Serverless}, achieving a \textbf{30\% reduction in compute costs} and a \textbf{50\% improvement in job start-up times}.}
+        \resumeItem{Engineered a metadata-driven scheduling framework using an orchestrator to run pipelines on a per-source basis, increasing ingestion flexibility and reducing manual intervention by \textbf{10+ hours weekly}.}
+        \resumeItem{Collaborated on the development of a \textbf{Data Retention Framework} in strict accordance with \textbf{Australian Regulatory Guidelines}, ensuring automated data lifecycle management and legal compliance across the platform.}
+        \resumeItem{Uplifted the \textbf{Medallion Architecture Bronze layer} to support multi-format ingestion (Compressed, Parquet, and PDF), expanding data availability for downstream analytics by \textbf{25\%}.}
+    \end{itemize}
+
+  \resumeSubheading
+    {Osciyatech}{Indore, India}
+    {App/Web Developer Intern}{06/2022 -- 08/2022}
+    \begin{itemize}[leftmargin=0.15in, label=\textbullet]
+        \resumeItem{Contributed to the development of full-stack applications, assisting in both frontend UI design and backend integration using agile methodologies.}
+    \end{itemize}
+
+\end{itemize}
+
+% ---------- SKILLS ----------
+\section*{Technical Skills}
+\begin{itemize}[leftmargin=0.15in, label={}, itemsep=4pt, parsep=0pt]
+    \small
+    \item \textbf{Languages:} Python (Advanced), SQL (Intermediate), Java, C++, JavaScript
+    \item \textbf{Data Engineering:} Databricks Serverless, Apache Spark, ETL Pipelines, Medallion Architecture, Lakehouse
+    \item \textbf{Tools \& Platforms:} Jenkins, AWS, Firebase, MySQL, Git, Arduino, Unity 3D, Cursor, Rally
+    \item \textbf{CS Fundamentals:} Database Management System, OOPs, Data Structures and Algorithms
+    \item \textbf{Certifications:} CQIB Certified, Codility Brown Belt
+\end{itemize}
+
+% ---------- KEY PROJECTS ----------
+\section*{Key Projects}
+\begin{itemize}[leftmargin=0.15in, label={}]
+
+  \resumeSubheading
+    {FMS (Facility Management System)}{Android Studio, Firebase}
+    {Guide: Prof. Mukulika Maity}{}
+    \begin{itemize}[leftmargin=0.15in, label=\textbullet]
+        \resumeItem{Developed a multi-stakeholder management system for IIITD, implementing role-based access control for Admins, Users, and Workers using Firebase as a real-time backend.}
+    \end{itemize}
+
+  \resumeSubheading
+    {Railway Booking System}{MySQL, PHP, HTML/CSS}
+    {Guide: Prof. Mukesh Mohania \quad \href{https://github.com/ChaitanyaJainYT/RailwayBooking}{GitHub}}{}
+    \begin{itemize}[leftmargin=0.15in, label=\textbullet]
+        \resumeItem{Architected a relational database model to handle complex booking transactions, ensuring data integrity and concurrent user access handling.}
+    \end{itemize}
+
+\end{itemize}
+
+% ---------- EDUCATION ----------
+\section*{Education}
+\begin{itemize}[leftmargin=0.15in, label={}]
+  \resumeSubheading
+    {Indraprastha Institute of Information Technology (IIITD)}{Delhi, India}
+    {B.Tech in Computer Science and Engineering (CSE) | GPA: 7.2}{Graduated 2024} \\\
+  \resumeSubheading
+    {Indian School Muscat}{Muscat, Oman}
+    {CBSE Class 12 (PCMCs) | Score: 92\%}{Graduated 2020}
+\end{itemize}
+
+% ---------- ACCOMPLISHMENTS ----------
+\section*{Accomplishments \& Leadership}
+\begin{itemize}[leftmargin=0.15in, label=\textbullet]
+    \resumeItem{\textbf{Robotics:} 1st Place in 3-Day Robotics Camp Competition at \textbf{NASA} (Kennedy Space Center).}
+    \resumeItem{\textbf{Hackathon:} 2nd Place in 50 Hr Game Jam for innovative and interesting game.}
+    \resumeItem{\textbf{Music:} Achieved \textbf{Trinity Grade 8 Drum Kit with Distinction} (2019) and Rock\&Pop Grade 8.}
+    \resumeItem{\textbf{Leadership:} Media Lead/Video Editor for Tasveer Club and Humans of IIITD (2021--2024).}
+\end{itemize}
+
+\end{document}
