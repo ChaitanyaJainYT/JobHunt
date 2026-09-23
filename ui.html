@@ -46,10 +46,16 @@
   #consoleFab svg { width:16px; height:16px; }
   #consoleSidebar { position:fixed; top:0; right:0; height:100vh; width:min(430px,94vw); background:var(--card); border-left:1px solid var(--line); box-shadow:-8px 0 24px rgba(0,0,0,.18); transform:translateX(105%); transition:transform .25s ease; z-index:55; display:flex; flex-direction:column; }
   #consoleSidebar.open { transform:none; }
-  #consoleSidebar .side-head { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 0; }
-  #consoleSidebar .side-head h2 { margin:0; }
-  #consoleSidebar .side-body { padding:12px 16px 16px; overflow-y:auto; }
+  .sidebar .side-head { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 0; gap:8px; }
+  .sidebar .side-head h2 { margin:0; }
+  .sidebar .side-body { padding:12px 16px 16px; overflow-y:auto; }
   #consoleSidebar #consoleLog { max-height:52vh; }
+  #liFab { position:fixed; left:18px; bottom:18px; z-index:60; border-radius:999px; padding:10px 16px; display:flex; gap:8px; align-items:center; box-shadow:0 4px 14px rgba(0,0,0,.25); font-weight:600; background:var(--acc); color:#fff; border:0; cursor:pointer; font-size:14px; }
+  #liFab svg { width:16px; height:16px; }
+  #liSidebar { position:fixed; top:0; left:0; height:100vh; width:min(480px,94vw); background:var(--card); border-right:1px solid var(--line); box-shadow:8px 0 24px rgba(0,0,0,.18); transform:translateX(-105%); transition:transform .25s ease; z-index:55; display:flex; flex-direction:column; }
+  #liSidebar.open { transform:none; }
+  #liSidebar .side-body { flex:1; display:flex; flex-direction:column; gap:8px; min-height:0; }
+  #liFrame { flex:1; border:1px solid var(--line); border-radius:8px; background:#fff; min-height:200px; width:100%; }
 </style>
 </head>
 <body>
@@ -112,11 +118,32 @@
   </section>
 
 </main>
+<button id="liFab" onclick="toggleJobs()" title="Browse LinkedIn Jobs">
+  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="11" height="9" rx="1.5"/><path d="M6 4.5V3h4v1.5M2.5 8h11"/></svg>
+  LinkedIn Jobs
+</button>
+<aside id="liSidebar" class="sidebar" aria-label="LinkedIn Jobs">
+  <div class="side-head">
+    <h2>LinkedIn Jobs</h2>
+    <div style="display:flex; gap:6px; align-items:center">
+      <a class="icon-link" href="https://www.linkedin.com/jobs/" target="_blank" title="Open in new tab" aria-label="Open LinkedIn Jobs in new tab"><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5H3.5v9h9V9.5"/><path d="M9.5 3.5h3v3"/><path d="M12.5 3.5 8 8"/></svg></a>
+      <button class="ghost" onclick="toggleJobs(false)" style="padding:6px 12px" aria-label="Minimize LinkedIn panel">×</button>
+    </div>
+  </div>
+  <div class="side-body">
+    <div class="row">
+      <input id="liQ" type="text" placeholder="Keywords, e.g. data engineer" autocomplete="off" onkeydown="if(event.key==='Enter')liSearch()">
+      <button onclick="liSearch()">Search</button>
+    </div>
+    <div class="muted">LinkedIn usually refuses to load inside embedded panels — if the frame below is blank, use the new-tab icon, then paste any posting URL into <b>New application</b>.</div>
+    <iframe id="liFrame" title="LinkedIn Jobs" loading="lazy"></iframe>
+  </div>
+</aside>
 <button id="consoleFab" onclick="toggleConsole()" title="Open console">
   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3.5h12v9H2z"/><path d="M5 6.5 7 8l-2 1.5M8.5 10H11"/></svg>
   Console
 </button>
-<aside id="consoleSidebar" aria-label="Console">
+<aside id="consoleSidebar" class="sidebar" aria-label="Console">
   <div class="side-head">
     <h2>Console</h2>
     <button class="ghost" onclick="toggleConsole(false)" style="padding:6px 12px" aria-label="Close console">×</button>
@@ -287,8 +314,27 @@ function toggleConsole(force) {
   if (show) { const i = document.getElementById("consoleIn"); if (i) i.focus(); }
 }
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape") toggleConsole(false);
+  if (e.key === "Escape") { toggleConsole(false); toggleJobs(false); }
 });
+
+let liLoaded = false;
+function toggleJobs(force) {
+  const s = document.getElementById("liSidebar");
+  const fab = document.getElementById("liFab");
+  const show = force === undefined ? !s.classList.contains("open") : !!force;
+  s.classList.toggle("open", show);
+  fab.style.display = show ? "none" : "flex";
+  if (show && !liLoaded) {
+    liLoaded = true;
+    document.getElementById("liFrame").src = "https://www.linkedin.com/jobs/";
+  }
+  if (show) { const i = document.getElementById("liQ"); if (i) i.focus(); }
+}
+
+function liSearch() {
+  const q = document.getElementById("liQ").value.trim();
+  window.open("https://www.linkedin.com/jobs/search/?keywords=" + encodeURIComponent(q || "software engineer"), "_blank");
+}
 
 function fillConsole(cmd) {
   const el = document.getElementById("consoleIn");
