@@ -112,29 +112,56 @@ def build_gmail_service(creds_file: str = "credentials.json"):
     except ImportError as e:
         raise GmailError("Gmail libs missing. Run: pip install -r requirements.txt") from e
     from src.sheets import oauth_denied_hint
-    scopes = ["https://www.googleapis.com/auth/gmail.readonly"]
+    from src.sheets import APP_SCOPES, GMAIL_SCOPES, _browser_consent, _try_refresh
     root = Path(__file__).resolve().parent.parent
     cred_path = root / creds_file if not Path(creds_file).is_absolute() else Path(creds_file)
     tok_path = root / "token.json"
     from src.sheets import load_valid_creds
     try:
-        creds = load_valid_creds(tok_path, scopes)
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                if not cred_path.exists():
-                    raise GmailError(f"Google credentials not found: {cred_path}.")
-                flow = InstalledAppFlow.from_client_secrets_file(str(cred_path), scopes)
-                creds = flow.run_local_server(port=0)
-            # merge scopes with any previously stored ones (see save_token_merged)
+        creds = load_valid_creds(tok_path, GMAIL_SCOPES)
+        if creds and not creds.valid:
+            if not (creds.refresh_token and _try_refresh(creds)):
+                creds = None
+        if not creds:
+            print("[INFO] Opening browser for Google consent (one-time)...")
+            creds = _browser_consent(cred_path, GmailError)
             from src.sheets import save_token_merged
             save_token_merged(tok_path, creds)
-        return build("gmail", "v1", credentials=creds)
+        return _validated_gmail_build(creds, tok_path, cred_path)
     except GmailError:
         raise
     except Exception as e:
         raise GmailError(f"Gmail auth failed: {e}. {oauth_denied_hint(str(e))}") from e
+
+
+def _validated_gmail_build(creds, tok_path: Path, cred_path: Path):
+    """Build the Gmail client, verifying the access token actually works.
+
+    A stored access token may predate the latest consent (right scopes on
+    file, wrong scopes on the wire). One cheap getProfile call detects that;
+    on a scope 403 we refresh (mints a token with the full granted set),
+    re-save, and retry once.
+    """
+    from googleapiclient.discovery import build
+    svc = build("gmail", "v1", credentials=creds)
+    try:
+        svc.users().getProfile(userId="me").execute()
+        return svc
+    except Exception as e:
+        if "insufficient" not in str(e).lower() or not getattr(creds, "refresh_token", None):
+            raise
+        # Stale narrow access token: refresh (same lineage covers all scopes).
+        # If the stored grant itself is broken (e.g. mixed lineages), re-consent.
+        from src.sheets import _browser_consent, _try_refresh, save_token_merged
+        if _try_refresh(creds):
+            save_token_merged(tok_path, creds)
+        else:
+            print("[INFO] Stored grant can't refresh; opening browser...")
+            creds = _browser_consent(cred_path, GmailError)
+            save_token_merged(tok_path, creds)
+        svc = build("gmail", "v1", credentials=creds)
+        svc.users().getProfile(userId="me").execute()
+        return svc
 
 
 def run_check_mail(companies: list[str], sheet_id: str, creds_file: str = "credentials.json",

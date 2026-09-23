@@ -68,12 +68,15 @@ def ensure_header(ws) -> None:
 
 
 def load_valid_creds(tok_path: Path, scopes: list[str]):
-    """Load cached creds only if present, valid, AND covering all scopes.
+    """Load cached creds when usable without a browser popup.
+
+    Returns creds if the stored token covers all scopes AND is either valid
+    or refreshable (expired access token + refresh token -> silent refresh).
+    Returns None when interactive re-consent is genuinely needed.
 
     Both Credentials.valid and from_authorized_user_file() ignore the scopes
     actually granted to the stored token, so without a file-level check a
     Sheets-only token would be silently reused for Gmail -> 403.
-    Returns None when re-consent is needed.
     """
     import json
     from google.oauth2.credentials import Credentials
@@ -89,7 +92,41 @@ def load_valid_creds(tok_path: Path, scopes: list[str]):
         creds = Credentials.from_authorized_user_file(str(tok_path), scopes)
     except Exception:
         return None
-    return creds if (creds and creds.valid) else None
+    if not creds:
+        return None
+    if creds.valid or (creds.expired and creds.refresh_token):
+        return creds
+    return None
+
+
+SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets",
+                 "https://www.googleapis.com/auth/drive.file"]
+GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+# One combined consent for the whole app: a single refresh-token lineage
+# covering everything. Separate per-flow consents overwrite each other's
+# refresh tokens, leaving a token file whose scope list is a lie.
+APP_SCOPES = SHEETS_SCOPES + GMAIL_SCOPES
+
+
+def _try_refresh(creds) -> bool:
+    """Silent refresh. False (never raises) when the stored grant can't
+    refresh (revoked / scope mismatch) so callers can fall back to browser."""
+    from google.auth.transport.requests import Request
+    try:
+        creds.refresh(Request())
+        return True
+    except Exception:
+        return False
+
+
+def _browser_consent(cred_path: Path, error_cls):
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    if not cred_path.exists():
+        raise error_cls(
+            f"Google credentials not found: {cred_path}. Create Desktop-OAuth "
+            "client in Google Cloud Console, download as credentials.json.")
+    flow = InstalledAppFlow.from_client_secrets_file(str(cred_path), APP_SCOPES)
+    return flow.run_local_server(port=0)
 
 
 def _open_worksheet(sheet_id: str, creds_file: str, client=None):
@@ -103,35 +140,53 @@ def _open_worksheet(sheet_id: str, creds_file: str, client=None):
     except ImportError as e:
         raise SheetsError("gspread not installed. Run: pip install -r requirements.txt") from e
     # Prefer OAuth desktop flow (personal Gmail) with token reuse.
+    # All consents request APP_SCOPES so one refresh-token lineage covers
+    # Sheets + Gmail (per-flow consents clobber each other's grants).
     try:
-        from google_auth_oauthlib.flow import InstalledAppFlow
-        from google.auth.transport.requests import Request
-        from google.oauth2.credentials import Credentials
-        import json
-        scopes = ["https://www.googleapis.com/auth/spreadsheets",
-                  "https://www.googleapis.com/auth/drive.file"]
+        from google.oauth2.credentials import Credentials  # noqa: F401 (re-exported)
         root = Path(__file__).resolve().parent.parent
         cred_path = root / creds_file if not Path(creds_file).is_absolute() else Path(creds_file)
         tok_path = root / "token.json"
-        creds = load_valid_creds(tok_path, scopes)
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                if not cred_path.exists():
-                    raise SheetsError(
-                        f"Google credentials not found: {cred_path}. Create Desktop-OAuth "
-                        "client in Google Cloud Console, download as credentials.json.")
-                flow = InstalledAppFlow.from_client_secrets_file(str(cred_path), scopes)
-                creds = flow.run_local_server(port=0)
+        creds = load_valid_creds(tok_path, SHEETS_SCOPES)
+        if creds and not creds.valid:
+            if not (creds.refresh_token and _try_refresh(creds)):
+                creds = None
+        if not creds:
+            print("[INFO] Opening browser for Google consent (one-time)...")
+            creds = _browser_consent(cred_path, SheetsError)
             save_token_merged(tok_path, creds)
         gc = gspread.authorize(creds)
-        return gc.open_by_key(sheet_id).sheet1
+        try:
+            return gc.open_by_key(sheet_id).sheet1
+        except Exception as e:
+            # A still-valid access token may predate the latest consent and
+            # lack the new scopes. Refresh once (mints a token with the full
+            # granted set) and retry; if refresh itself fails, re-consent.
+            if _is_scope_error(e) and getattr(creds, "refresh_token", None):
+                if _try_refresh(creds):
+                    save_token_merged(tok_path, creds)
+                    return gspread.authorize(creds).open_by_key(sheet_id).sheet1
+                print("[INFO] Stored grant can't refresh; opening browser...")
+                creds = _browser_consent(cred_path, SheetsError)
+                save_token_merged(tok_path, creds)
+                return gspread.authorize(creds).open_by_key(sheet_id).sheet1
+            raise
     except SheetsError:
         raise
     except Exception as e:
-        raise SheetsError(f"Sheets auth/open failed: {e}. {oauth_denied_hint(str(e))}"
+        detail = f"{e} (caused by {e.__cause__})" if str(e) == "" and e.__cause__ else str(e)
+        raise SheetsError(f"Sheets auth/open failed: {detail}. {oauth_denied_hint(detail)}"
                           "Run 'python agent.py doctor'.") from e
+
+
+def _is_scope_error(e: Exception) -> bool:
+    seen, visited = e, set()
+    while seen is not None and id(seen) not in visited:
+        visited.add(id(seen))
+        if "insufficient authentication scopes" in str(seen).lower():
+            return True
+        seen = seen.__cause__ if seen.__cause__ is not None else seen.__context__
+    return False
 
 
 def save_token_merged(tok_path: Path, creds) -> None:

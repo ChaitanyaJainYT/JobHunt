@@ -69,6 +69,50 @@ def test_load_valid_creds_rejects_narrow_scopes(tmp_path):
     assert load_valid_creds(tmp_path / "missing.json", ["x"]) is None
 
 
+def test_load_valid_creds_allows_expired_refreshable(tmp_path):
+    import json
+    from src.sheets import load_valid_creds
+    tok = tmp_path / "token.json"
+    base = {"token": "ya29.old", "refresh_token": "r", "token_uri": "https://oauth2.googleapis.com/token",
+            "client_id": "c", "client_secret": "s", "scopes": ["s1"],
+            "expiry": "2020-01-01T00:00:00Z"}
+    tok.write_text(json.dumps(base))
+    assert load_valid_creds(tok, ["s1"]) is not None  # silent refresh, no browser
+    base.pop("refresh_token")
+    tok.write_text(json.dumps(base))
+    assert load_valid_creds(tok, ["s1"]) is None  # nothing to refresh with -> browser
+
+
+def test_gmail_build_refreshes_on_scope_403(tmp_path, monkeypatch):
+    import json
+    import googleapiclient.discovery as disc
+    import src.gmail as G
+    import src.sheets as S
+
+    class FakeCreds:
+        refresh_token = "r"
+        refreshed = 0
+        def refresh(self, _req):
+            type(self).refreshed += 1
+
+    calls = {"n": 0}
+    class FakeSvc:
+        def users(self):
+            return self
+        def getProfile(self, userId=None):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise Exception("Request had insufficient authentication scopes.")
+            return self
+        def execute(self):
+            return {"emailAddress": "t@e.c"}
+    monkeypatch.setattr(disc, "build", lambda *a, **k: FakeSvc())
+    monkeypatch.setattr(S, "save_token_merged", lambda *a, **k: None)
+    svc = G._validated_gmail_build(FakeCreds(), tmp_path / "t.json", tmp_path / "c.json")
+    assert calls["n"] == 2  # 1st failed with 403, 2nd succeeded after refresh
+    assert FakeCreds.refreshed == 1
+
+
 def test_save_token_merged_unions_scopes(tmp_path):
     import json
     from src.sheets import save_token_merged
@@ -79,6 +123,48 @@ def test_save_token_merged_unions_scopes(tmp_path):
             return json.dumps({"token": "t2", "scopes": ["scopeB"]})
     save_token_merged(tok, FakeCreds())
     assert set(json.loads(tok.read_text())["scopes"]) == {"scopeA", "scopeB"}
+
+
+def test_scope_403_self_heals_with_refresh(monkeypatch, tmp_path):
+    import json
+    import gspread
+    import src.sheets as S
+
+    class FakeCreds:
+        valid = True
+        expired = False
+        refresh_token = "r"
+        refreshed = 0
+        def refresh(self, _req):
+            type(self).refreshed += 1
+        def to_json(self):
+            return json.dumps({"token": "new", "scopes": ["s1"]})
+
+    creds = FakeCreds()
+    monkeypatch.setattr(S, "load_valid_creds", lambda *a, **k: creds)
+
+    calls = {"n": 0}
+    class FakeSheet:
+        def get_all_values(self):
+            return [S.HEADER, ["2026-01-01", "Acme", "T", "80", "p", "u", "Applied", ""]]
+    class FakeClient:
+        def open_by_key(self, _key):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                # gspread's exact behavior: bare PermissionError chained from APIError
+                raise PermissionError() from Exception(
+                    "APIError: [403]: Request had insufficient authentication scopes.")
+            class S1:
+                @property
+                def sheet1(self):
+                    return FakeSheet()
+            return S1()
+    monkeypatch.setattr(gspread, "authorize", lambda _c: FakeClient())
+    monkeypatch.setattr(S, "save_token_merged", lambda *a, **k: None)
+
+    ws = S._open_worksheet("sid", "creds.json")
+    assert ws.get_all_values()[1][1] == "Acme"
+    assert FakeCreds.refreshed == 1 and calls["n"] == 2
 
 
 def test_groq_fallback_on_gemini_quota(monkeypatch):
