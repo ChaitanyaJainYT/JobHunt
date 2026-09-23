@@ -44,8 +44,23 @@ def tailor_resume(base_tex: str, title: str, company: str,
     return out
 
 
-def save_tailored(tex: str, folder: Path, company: str) -> Path:
+def resume_stem(company: str, applicant: str = "Chaitanya Jain",
+                date_str: str | None = None) -> str:
+    """Filename stem: <COMPANY>_<Applicant_Name>_Resume_<DDMMYY>.
+
+    Tectonic names the PDF after the .tex stem, so saving
+    `<stem>.tex` yields `<stem>.pdf` automatically.
+    """
+    from datetime import date
+    d = date_str or date.today().strftime("%d%m%y")
+    who = sanitize_filename(applicant or "Candidate")
+    return f"{sanitize_filename(company)}_{who}_Resume_{d}"
+
+
+def save_tailored(tex: str, folder: Path, company: str,
+                  applicant: str = "Chaitanya Jain",
+                  date_str: str | None = None) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
-    p = folder / f"{sanitize_filename(company)}_Resume.tex"
+    p = folder / f"{resume_stem(company, applicant, date_str)}.tex"
     p.write_text(tex, encoding="utf-8")
     return p

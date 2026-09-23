@@ -31,6 +31,14 @@ def test_tailor_saves_file(tmp_path):
     assert p.exists() and p.suffix == ".tex"
 
 
+def test_resume_naming_convention(tmp_path):
+    p = T.save_tailored(BASE, tmp_path, "LSEG", applicant="Chaitanya Jain",
+                        date_str="230926")
+    assert p.name == "LSEG_Chaitanya_Jain_Resume_230926.tex"
+    assert T.resume_stem("Acme Corp", "Chaitanya Jain", "010126") == \
+        "Acme_Corp_Chaitanya_Jain_Resume_010126"
+
+
 def _run_ok(*a, **k):
     class R:
         returncode = 0

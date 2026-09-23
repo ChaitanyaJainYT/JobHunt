@@ -93,6 +93,70 @@ def doctor_status() -> list[dict]:
             for r in run_doctor()]
 
 
+MAX_TEX_BYTES = 500_000
+
+
+def _job_dir(name: str) -> Path | None:
+    """Validate a job folder name: direct child of output/ containing a resume."""
+    if not name or "/" in name or "\\" in name:
+        return None
+    d = safe_output_path(name)
+    if d is None or not d.is_dir():
+        return None
+    return d
+
+
+def find_resume_tex(job_dir: Path) -> Path | None:
+    """Newest *Resume*.tex in the folder (covers old + dated naming)."""
+    cands = sorted(job_dir.glob("*Resume*.tex"),
+                   key=lambda p: p.stat().st_mtime, reverse=True)
+    return cands[0] if cands else None
+
+
+def get_tex(job_dir_name: str) -> dict:
+    d = _job_dir(job_dir_name)
+    if d is None:
+        raise ValueError("Unknown job folder.")
+    tex = find_resume_tex(d)
+    if tex is None:
+        raise ValueError("No resume .tex in that folder yet — run an application first.")
+    return {"dir": d.name, "file": tex.name, "content": tex.read_text(encoding="utf-8")}
+
+
+def save_tex(job_dir_name: str, content: str, compile_pdf: bool = True) -> dict:
+    d = _job_dir(job_dir_name)
+    if d is None:
+        raise ValueError("Unknown job folder.")
+    if not content or not content.strip():
+        raise ValueError("Refusing to save an empty resume.")
+    if len(content.encode("utf-8")) > MAX_TEX_BYTES:
+        raise ValueError("Resume too large (500 KB limit).")
+    tex = find_resume_tex(d)
+    if tex is None:
+        # Fresh resume file in this folder (uses current naming convention).
+        from src.tailor import resume_stem
+        try:
+            from src.config import load_config
+            applicant = load_config(auto_wizard=False, demo=True).applicant_name
+        except Exception:
+            applicant = "Chaitanya Jain"
+        parts = d.name.rsplit("_", 1)
+        company = parts[0] if len(parts) == 2 else d.name
+        tex = d / f"{resume_stem(company, applicant)}.tex"
+    tex.write_text(content, encoding="utf-8")
+    if not compile_pdf:
+        return {"ok": True, "file": tex.name, "compiled": False}
+    from src.compiler import LatexCompileError, compile_tex
+    try:
+        pdf = compile_tex(tex)
+        return {"ok": True, "file": tex.name, "compiled": True,
+                "pdf_url": f"/output/{d.name}/{pdf.name}"}
+    except LatexCompileError as e:
+        log = (e.log or str(e))[-3000:]
+        return {"ok": False, "file": tex.name, "compiled": False,
+                "error": str(e)[:500], "compile_log": log}
+
+
 def get_sheet_url() -> str:
     """Public spreadsheet URL from config. Empty when not configured.
 
@@ -311,6 +375,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"sheet_url": get_sheet_url()})
             elif path == "/api/version":
                 self._json({"version": UI_VERSION})
+            elif path == "/api/tex":
+                qs = urllib.parse.parse_qs(parsed.query)
+                try:
+                    self._json(get_tex(qs.get("dir", [""])[0]))
+                except ValueError as e:
+                    self._json({"error": str(e)}, 400)
             elif path.startswith("/api/tasks/"):
                 task = get_task(path.rsplit("/", 1)[-1])
                 self._json(task or {"error": "unknown task"}, 200 if task else 404)
@@ -361,6 +431,15 @@ class Handler(BaseHTTPRequestHandler):
                 body = self._read_json()
                 res = console_dispatch(body.get("command", ""))
                 self._json(res, 200 if "error" not in res else 400)
+            elif parsed.path == "/api/tex":
+                body = self._read_json()
+                try:
+                    res = save_tex(body.get("dir", ""), body.get("content", ""),
+                                   bool(body.get("compile", True)))
+                except ValueError as e:
+                    self._json({"error": str(e)}, 400)
+                    return
+                self._json(res, 200 if res.get("ok") else 422)
             else:
                 self._json({"error": "not found"}, 404)
         except BrokenPipeError:

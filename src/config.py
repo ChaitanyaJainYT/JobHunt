@@ -33,6 +33,7 @@ class AppConfig:
     rapidapi_country: str = "in"
     google_sheet_id: str = ""
     google_credentials_file: str = "credentials.json"
+    applicant_name: str = "Chaitanya Jain"
     demo: bool = False
 
     @property
@@ -53,6 +54,7 @@ _MANAGED_KEYS: list[tuple[str, str, bool, str]] = [
     ("RAPIDAPI_COUNTRY", "rapidapi_country", False, "JSearch country bias [in]"),
     ("GOOGLE_SHEET_ID", "google_sheet_id", True, "Google Sheet ID (from sheet URL between /d/ and /edit)"),
     ("GOOGLE_CREDENTIALS_FILE", "google_credentials_file", False, "Google OAuth credentials file [credentials.json]"),
+    ("APPLICANT_NAME", "applicant_name", False, "Your name for resume filenames [Chaitanya Jain]"),
 ]
 
 
@@ -124,6 +126,8 @@ def run_setup_wizard() -> AppConfig:
             values[env_key] = "in"
         elif env_key == "GOOGLE_CREDENTIALS_FILE" and not values.get(env_key):
             values[env_key] = "credentials.json"
+        elif env_key == "APPLICANT_NAME" and not values.get(env_key):
+            values[env_key] = "Chaitanya Jain"
 
     _write_dotenv(ENV_PATH, values)
     print(f"\nSaved to {ENV_PATH}. You can re-run with: python agent.py doctor")
@@ -147,6 +151,7 @@ def _from_values(values: dict[str, str], demo: bool) -> AppConfig:
         rapidapi_country=get("RAPIDAPI_COUNTRY", "in"),
         google_sheet_id=get("GOOGLE_SHEET_ID"),
         google_credentials_file=get("GOOGLE_CREDENTIALS_FILE", "credentials.json"),
+        applicant_name=get("APPLICANT_NAME", "Chaitanya Jain"),
         demo=demo,
     )
 

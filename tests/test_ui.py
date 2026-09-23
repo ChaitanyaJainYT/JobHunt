@@ -136,6 +136,68 @@ def test_spawn_error_includes_trace():
     assert any("RuntimeError" in line for line in t["result"]["trace"])
 
 
+def _make_job(tmp_path, monkeypatch, name="HP_1", tex="hello tex"):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "OUTPUT_ROOT", tmp_path)
+    d = tmp_path / name
+    d.mkdir(exist_ok=True)
+    (d / "HP_Resume.tex").write_text(tex, encoding="utf-8")
+    return d
+
+
+def test_get_tex_roundtrip(tmp_path, monkeypatch):
+    _make_job(tmp_path, monkeypatch)
+    out = U.get_tex("HP_1")
+    assert out["file"] == "HP_Resume.tex" and out["content"] == "hello tex"
+
+
+def test_get_tex_rejects_unknown_and_escape(tmp_path, monkeypatch):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "OUTPUT_ROOT", tmp_path)
+    with pytest.raises(ValueError):
+        U.get_tex("Nope_1")
+    with pytest.raises(ValueError):
+        U.get_tex("../agent")
+
+
+def test_save_tex_and_compile_success(tmp_path, monkeypatch):
+    import src.compiler as Cp
+    d = _make_job(tmp_path, monkeypatch)
+    pdf = d / "HP_Resume.pdf"
+    monkeypatch.setattr(Cp, "compile_tex", lambda tex: (pdf.write_bytes(b"%PDF"), pdf)[1])
+    res = U.save_tex("HP_1", "new content", compile_pdf=True)
+    assert res["ok"] and res["compiled"]
+    assert res["pdf_url"].endswith("HP_Resume.pdf")
+    assert (d / "HP_Resume.tex").read_text(encoding="utf-8") == "new content"
+
+
+def test_save_tex_compile_failure_keeps_tex(tmp_path, monkeypatch):
+    import src.compiler as Cp
+    d = _make_job(tmp_path, monkeypatch)
+    def boom(tex):
+        raise Cp.LatexCompileError("tectonic failed", log="! missing }")
+    monkeypatch.setattr(Cp, "compile_tex", boom)
+    res = U.save_tex("HP_1", "broken tex", compile_pdf=True)
+    assert res["ok"] is False and "missing" in res["compile_log"]
+    assert (d / "HP_Resume.tex").read_text(encoding="utf-8") == "broken tex"
+
+
+def test_save_tex_rejects_empty(tmp_path, monkeypatch):
+    _make_job(tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match="empty"):
+        U.save_tex("HP_1", "   ")
+
+
+def test_save_tex_creates_dated_file_when_missing(tmp_path, monkeypatch):
+    import re
+    import src.utils as UT
+    monkeypatch.setattr(UT, "OUTPUT_ROOT", tmp_path)
+    (tmp_path / "HP_1").mkdir()
+    res = U.save_tex("HP_1", "fresh", compile_pdf=False)
+    assert res["ok"] and res["compiled"] is False
+    assert re.search(r"_Resume_\d{6}\.tex$", res["file"])
+
+
 def test_get_sheet_url_empty_when_unconfigured(monkeypatch):
     import src.config as C
     def boom(**k):

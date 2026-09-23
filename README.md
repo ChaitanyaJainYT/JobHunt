@@ -25,7 +25,7 @@ python agent.py check-mail
 python agent.py ui
 ```
 
-Opens `http://127.0.0.1:8765` (localhost only, no extra packages). Paste a job URL → watch live progress → open the tailored PDF and the manual apply link. Also shows tracked applications with a direct **Open Google Sheet** link, a one-click Gmail check, and a **Console** card where you can type `doctor`, `check-mail [--days N] [--demo]`, or `apply <url> [--resume] [--demo]` (anything else is rejected — it never runs a shell; `setup` needs a real terminal). A **Dark/Light** toggle sits in the header (your OS theme is the default; choice is remembered). Long jobs run in the background; Google consent tabs open in your browser as usual on first run.
+Opens `http://127.0.0.1:8765` (localhost only, no extra packages). Top to bottom: **New application** (paste URL → live progress → PDF + manual apply link), **Check Gmail replies**, **Tracked applications** (direct **Open Google Sheet** link; per-row **edit icon** opens a `.tex` editor with **Save only** / **Save & compile PDF**, compile errors shown with the tectonic log), and a hidden-until-editing **resume editor**. A **Console** lives in a slide-in sidebar (bottom-right button, `Esc` closes) for `doctor`, `check-mail [--days N] [--demo]`, `apply <url> [--resume] [--demo]` — anything else is rejected, it never runs a shell, and `setup` needs a real terminal. A **Dark/Light** toggle sits in the header (OS theme by default, choice remembered). Long jobs run in the background; Google consent tabs open in your browser as usual on first run.
 
 ## Commands
 
@@ -70,7 +70,7 @@ LinkedIn numeric IDs are not JSearch IDs, so for a LinkedIn URL the flow is: pub
 
 ## Outputs
 
-Per job: `output/<Company>_<JobId>/job.json`, `match.json`, `<Company>_Resume.tex`, `<Company>_Resume.pdf`, `run.log`. `main.tex` is never modified. Sheet columns: Date Applied, Company, Job Title, Match Score %, Local PDF Path, Application URL, Status (`Ready to Apply`), Last Email Date.
+Per job: `output/<Company>_<JobId>/job.json`, `match.json`, `<COMPANY>_<Name>_Resume_<DDMMYY>.tex/.pdf`, `run.log`. Example: `HP_Chaitanya_Jain_Resume_230926.pdf` (name from `APPLICANT_NAME` in `.env`, date = run day). `main.tex` is never modified. Sheet columns: Date Applied, Company, Job Title, Match Score %, Local PDF Path, Application URL, Status (`Ready to Apply`), Last Email Date.
 
 ## Troubleshooting
 

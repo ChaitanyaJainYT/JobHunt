@@ -144,7 +144,8 @@ def run_apply(url: str, demo: bool = False, out: str | None = None,
                      match.core_requirements, api_key=cfg.gemini_api_key,
                      model=cfg.llm_model, groq_key=cfg.groq_api_key,
                      groq_model=cfg.groq_model)
-        tex_path = save_tailored(tex, folder, job.company)
+        tex_path = save_tailored(tex, folder, job.company,
+                                   applicant=cfg.applicant_name)
     except Exception as e:
         print(f"\n[ERROR] Resume tailor failed: {e}")
         return 3

@@ -27,7 +27,7 @@ def test_demo_e2e(tmp_path):
     folder = tmp_path / "job1"
     for f in ["job.json", "match.json", "run.log"]:
         assert (folder / f).exists(), f
-    assert list(folder.glob("*_Resume.tex"))
+    assert list(folder.glob("*_Resume_*.tex"))
     assert list(folder.glob("*.pdf"))
     vals = c.ws.get_all_values()
     assert vals[0] == S.HEADER and len(vals) == 2
@@ -54,7 +54,8 @@ def test_pipeline_continues_on_pdf_fail(tmp_path):
                                         "rapidapi_search_endpoint": "https://e/search",
                                         "rapidapi_country": "in",
                                         "google_sheet_id": "demo",
-                                        "google_credentials_file": "c"})(),
+                                        "google_credentials_file": "c",
+                                        "applicant_name": "Chaitanya Jain"})(),
                      _overrides={
                          "fetch_job": lambda *a, **k: type("J", (), {
                              "title": "T", "company": "Acme", "description": "Python role",
@@ -102,7 +103,8 @@ def test_resume_reuses_saved_artifacts(tmp_path, monkeypatch):
                                          "rapidapi_search_endpoint": "https://e/search",
                                          "rapidapi_country": "in",
                                          "google_sheet_id": "demo",
-                                         "google_credentials_file": "c"})(),
+                                         "google_credentials_file": "c",
+                                         "applicant_name": "Chaitanya Jain"})(),
                       _overrides={
                           "fetch_job": fail_fetch,
                           "analyze_match": fail_match,

@@ -42,6 +42,14 @@
   .icon-link:hover { background:var(--accbg); }
   .icon-link + .icon-link { margin-left:4px; }
   .icon-link svg { width:17px; height:17px; display:block; }
+  #consoleFab { position:fixed; right:18px; bottom:18px; z-index:60; border-radius:999px; padding:10px 16px; display:flex; gap:8px; align-items:center; box-shadow:0 4px 14px rgba(0,0,0,.25); font-weight:600; }
+  #consoleFab svg { width:16px; height:16px; }
+  #consoleSidebar { position:fixed; top:0; right:0; height:100vh; width:min(430px,94vw); background:var(--card); border-left:1px solid var(--line); box-shadow:-8px 0 24px rgba(0,0,0,.18); transform:translateX(105%); transition:transform .25s ease; z-index:55; display:flex; flex-direction:column; }
+  #consoleSidebar.open { transform:none; }
+  #consoleSidebar .side-head { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 0; }
+  #consoleSidebar .side-head h2 { margin:0; }
+  #consoleSidebar .side-body { padding:12px 16px 16px; overflow-y:auto; }
+  #consoleSidebar #consoleLog { max-height:52vh; }
 </style>
 </head>
 <body>
@@ -72,6 +80,16 @@
   </section>
 
   <section class="card">
+    <h2>Check Gmail replies</h2>
+    <div class="row">
+      <label class="muted">Last <input id="days" type="number" value="14" min="1" max="90"> days</label>
+      <button id="mailBtn" onclick="startMail()">Check mail</button>
+    </div>
+    <div id="mailStatus" class="muted" style="margin-top:8px"></div>
+    <pre id="mailLog" class="log" style="display:none"></pre>
+  </section>
+
+  <section class="card">
     <h2>Tracked applications
       <button class="ghost" onclick="loadJobs()" style="padding:6px 12px">Refresh</button>
       <a id="sheetLink" href="#" target="_blank" title="Open Google Sheet" style="display:none; font-size:13px; margin-left:8px; vertical-align:middle">Google Sheet <span class="icon-link" style="padding:0 2px; vertical-align:-3px"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M6 2.5v11M2.5 6h11M2.5 10h11"/></svg></span></a>
@@ -79,8 +97,31 @@
     <div id="jobs"><span class="muted">Loading…</span></div>
   </section>
 
-  <section class="card">
+  <section class="card" id="editorCard" style="display:none">
+    <h2>Edit resume — <span id="editorFile" style="font-family:monospace; font-size:14px"></span></h2>
+    <div class="muted" style="margin-bottom:8px">Fix wording, add a line, repair LaTeX — then save. “Save &amp; compile” rebuilds the PDF above (jobs table refreshes).</div>
+    <textarea id="editorText" spellcheck="false" style="width:100%; min-height:380px; font:12.5px/1.55 Consolas, monospace; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink); white-space:pre"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button onclick="saveTex(false)">Save only</button>
+      <button onclick="saveTex(true)">Save &amp; compile PDF</button>
+      <button class="ghost" onclick="closeEditor()">Close</button>
+      <span id="editorStatus" class="muted"></span>
+    </div>
+    <pre id="editorLog" class="log" style="display:none; margin-top:10px"></pre>
+    <div id="editorResult"></div>
+  </section>
+
+</main>
+<button id="consoleFab" onclick="toggleConsole()" title="Open console">
+  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3.5h12v9H2z"/><path d="M5 6.5 7 8l-2 1.5M8.5 10H11"/></svg>
+  Console
+</button>
+<aside id="consoleSidebar" aria-label="Console">
+  <div class="side-head">
     <h2>Console</h2>
+    <button class="ghost" onclick="toggleConsole(false)" style="padding:6px 12px" aria-label="Close console">×</button>
+  </div>
+  <div class="side-body">
     <div class="muted" style="margin-bottom:8px">Run <b>doctor</b>, <b>check-mail</b>, or <b>apply</b> here. Anything else is rejected — this is not a shell. Prefix <span style="font-family:monospace">python agent.py</span> optional.</div>
     <div class="row" style="margin-bottom:8px">
       <button class="ghost" onclick="fillConsole('doctor')" style="padding:6px 12px">doctor</button>
@@ -92,19 +133,8 @@
       <button onclick="runConsole()">Run</button>
     </div>
     <pre id="consoleLog" class="log" style="display:none; margin-top:10px"></pre>
-  </section>
-
-  <section class="card">
-    <h2>Check Gmail replies</h2>
-    <div class="row">
-      <label class="muted">Last <input id="days" type="number" value="14" min="1" max="90"> days</label>
-      <button id="mailBtn" onclick="startMail()">Check mail</button>
-    </div>
-    <div id="mailStatus" class="muted" style="margin-top:8px"></div>
-    <pre id="mailLog" class="log" style="display:none"></pre>
-  </section>
-
-</main>
+  </div>
+</aside>
 <script>
 async function api(path, opts) {
   const r = await fetch(path, opts);
@@ -117,6 +147,7 @@ function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;",
 const ICON_PDF = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 1.5h4.5L12 5v9.5H4z"/><path d="M8.5 1.5V5H12"/><path d="M6 8.5h4M6 11h4"/></svg>`;
 const ICON_APPLY = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5H3.5v9h9V9.5"/><path d="M9.5 3.5h3v3"/><path d="M12.5 3.5 8 8"/></svg>`;
 const ICON_SHEET = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M6 2.5v11M2.5 6h11M2.5 10h11"/></svg>`;
+const ICON_EDIT = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 2.5 13.5 4.5 5.5 12.5l-3.5 1 1-3.5z"/></svg>`;
 
 async function loadJobs() {
   const box = document.getElementById("jobs");
@@ -127,7 +158,7 @@ async function loadJobs() {
       jobs.map(j => `<tr><td><b>${esc(j.company)}</b><div class="skills">${esc((j.matching_skills||[]).join(", "))}</div></td>
         <td>${esc(j.title)}${(j.missing_skills||[]).length ? `<div class="skills">missing: ${esc(j.missing_skills.join(", "))}</div>` : ""}</td>
         <td>${j.match_score == null ? "—" : `<span class="score">${j.match_score}%</span>`}</td>
-        <td style="white-space:nowrap">${j.pdf_url ? `<a class="icon-link" href="${j.pdf_url}" target="_blank" title="Open tailored PDF" aria-label="Open tailored PDF">${ICON_PDF}</a>` : '<span class="muted" title="No PDF produced">—</span>'}${j.apply_link ? `<a class="icon-link" href="${esc(j.apply_link)}" target="_blank" title="Apply manually (opens job posting)" aria-label="Apply manually">${ICON_APPLY}</a>` : ""}</td></tr>`).join("") + `</table>`;
+        <td style="white-space:nowrap"><button class="icon-link" style="background:none;border:0;cursor:pointer" onclick="openEditor('${esc(j.dir)}')" title="Edit resume .tex" aria-label="Edit resume">${ICON_EDIT}</button>${j.pdf_url ? `<a class="icon-link" href="${j.pdf_url}" target="_blank" title="Open tailored PDF" aria-label="Open tailored PDF">${ICON_PDF}</a>` : '<span class="muted" title="No PDF produced">—</span>'}${j.apply_link ? `<a class="icon-link" href="${esc(j.apply_link)}" target="_blank" title="Apply manually (opens job posting)" aria-label="Apply manually">${ICON_APPLY}</a>` : ""}</td></tr>`).join("") + `</table>`;
   } catch (e) { box.innerHTML = `<span class="muted">Could not load jobs: ${esc(e.message)}</span>`; }
 }
 
@@ -197,6 +228,67 @@ async function loadSheet() {
     }
   } catch (e) { /* sheet not configured — link stays hidden */ }
 }
+
+let editorDir = "";
+
+async function openEditor(dir) {
+  editorDir = dir;
+  document.getElementById("editorCard").style.display = "block";
+  document.getElementById("editorFile").textContent = dir + "/…";
+  document.getElementById("editorText").value = "Loading…";
+  document.getElementById("editorResult").innerHTML = "";
+  document.getElementById("editorLog").style.display = "none";
+  document.getElementById("editorStatus").textContent = "";
+  try {
+    const t = await api("/api/tex?dir=" + encodeURIComponent(dir));
+    document.getElementById("editorFile").textContent = dir + "/" + t.file;
+    document.getElementById("editorText").value = t.content;
+  } catch (e) {
+    document.getElementById("editorText").value = "";
+    document.getElementById("editorStatus").textContent = "Error: " + e.message;
+  }
+  document.getElementById("editorCard").scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+function closeEditor() {
+  document.getElementById("editorCard").style.display = "none";
+  editorDir = "";
+}
+
+async function saveTex(compile) {
+  if (!editorDir) return;
+  const status = document.getElementById("editorStatus");
+  const log = document.getElementById("editorLog");
+  const box = document.getElementById("editorResult");
+  status.textContent = compile ? "Saving & compiling…" : "Saving…";
+  log.style.display = "none"; box.innerHTML = "";
+  let res;
+  try {
+    res = await api("/api/tex", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({dir: editorDir, content: document.getElementById("editorText").value, compile})});
+  } catch (e) { status.textContent = "Error: " + e.message; return; }
+  if (!compile || res.compiled) {
+    status.textContent = res.compiled ? "Saved + PDF rebuilt." : "Saved (no compile).";
+    if (res.pdf_url) box.innerHTML = `<div class="result"><a href="${res.pdf_url}" target="_blank"><b>Open rebuilt PDF</b></a></div>`;
+    loadJobs();
+    return;
+  }
+  status.textContent = "Saved, but compile failed — fix the LaTeX below and retry.";
+  box.innerHTML = `<div class="result err"><b>tectonic error:</b> ${esc(res.error || "unknown")}</div>`;
+  if (res.compile_log) { log.style.display = "block"; log.textContent = res.compile_log; }
+}
+
+function toggleConsole(force) {
+  const s = document.getElementById("consoleSidebar");
+  const fab = document.getElementById("consoleFab");
+  const show = force === undefined ? !s.classList.contains("open") : !!force;
+  s.classList.toggle("open", show);
+  fab.style.display = show ? "none" : "flex";
+  if (show) { const i = document.getElementById("consoleIn"); if (i) i.focus(); }
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") toggleConsole(false);
+});
 
 function fillConsole(cmd) {
   const el = document.getElementById("consoleIn");
