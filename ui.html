@@ -92,6 +92,14 @@
   </section>
 
   <section class="card">
+    <h2>Base resume <span class="muted" style="font-weight:normal; text-transform:none">main.tex — starting point for every tailor</span></h2>
+    <div class="row">
+      <button onclick="openBaseEditor()">Edit base resume</button>
+      <span class="muted">Raw or section-by-section editing, live PDF preview. Saving keeps the previous version as <b>main.tex.bak</b>.</span>
+    </div>
+  </section>
+
+  <section class="card">
     <h2>Check Gmail replies</h2>
     <div class="row">
       <label class="muted">Last <input id="days" type="number" value="14" min="1" max="90"> days</label>
@@ -111,14 +119,21 @@
 
   <section class="card" id="editorCard" style="display:none">
     <h2>Edit resume — <span id="editorFile" style="font-family:monospace; font-size:14px"></span></h2>
-    <div class="muted" style="margin-bottom:8px">Fix wording, add a line, repair LaTeX — then save. “Save &amp; compile” rebuilds the PDF above (jobs table refreshes).</div>
+    <div class="muted" style="margin-bottom:8px">Fix wording, add a line, repair LaTeX — then save. “Save &amp; compile” rebuilds the PDF (jobs table refreshes). “Preview” compiles without saving.</div>
+    <div class="row" style="gap:6px; margin-bottom:10px">
+      <button id="modeRaw" onclick="setMode('raw')">Raw TeX</button>
+      <button id="modeSec" class="ghost" onclick="setMode('sections')">Sections</button>
+    </div>
     <textarea id="editorText" spellcheck="false" style="width:100%; min-height:380px; font:12.5px/1.55 Consolas, monospace; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink); white-space:pre"></textarea>
+    <div id="sectionsBox" style="display:none"></div>
     <div class="row" style="margin-top:10px">
       <button onclick="saveTex(false)">Save only</button>
       <button onclick="saveTex(true)">Save &amp; compile PDF</button>
+      <button class="ghost" onclick="doPreview()">Preview PDF</button>
       <button class="ghost" onclick="closeEditor()">Close</button>
       <span id="editorStatus" class="muted"></span>
     </div>
+    <iframe id="previewFrame" title="PDF preview" style="display:none; width:100%; min-height:520px; border:1px solid var(--line); border-radius:8px; margin-top:10px"></iframe>
     <pre id="editorLog" class="log" style="display:none; margin-top:10px"></pre>
     <div id="editorResult"></div>
   </section>
@@ -276,19 +291,28 @@ async function loadSheet() {
   } catch (e) { /* sheet not configured — link stays hidden */ }
 }
 
-let editorDir = "";
+let editorSource = null;   // {kind:"job",dir} | {kind:"base"}
+let editorMode = "raw";
+let editorParsed = null; // {head, tail, sections} in sections mode
 
-async function openEditor(dir) {
-  editorDir = dir;
+async function openEditor(dir) { await openResume({kind: "job", dir}); }
+async function openBaseEditor() { await openResume({kind: "base"}); }
+
+async function openResume(src) {
+  editorSource = src; editorMode = "raw"; editorParsed = null;
   document.getElementById("editorCard").style.display = "block";
-  document.getElementById("editorFile").textContent = dir + "/…";
+  document.getElementById("editorFile").textContent = src.kind === "base" ? "main.tex" : src.dir + "/…";
   document.getElementById("editorText").value = "Loading…";
   document.getElementById("editorResult").innerHTML = "";
   document.getElementById("editorLog").style.display = "none";
+  document.getElementById("previewFrame").style.display = "none";
   document.getElementById("editorStatus").textContent = "";
+  paintModeButtons();
   try {
-    const t = await api("/api/tex?dir=" + encodeURIComponent(dir));
-    document.getElementById("editorFile").textContent = dir + "/" + t.file;
+    const t = src.kind === "base"
+      ? await api("/api/base")
+      : await api("/api/tex?dir=" + encodeURIComponent(src.dir));
+    if (src.kind === "job") document.getElementById("editorFile").textContent = src.dir + "/" + t.file;
     document.getElementById("editorText").value = t.content;
   } catch (e) {
     document.getElementById("editorText").value = "";
@@ -299,20 +323,115 @@ async function openEditor(dir) {
 
 function closeEditor() {
   document.getElementById("editorCard").style.display = "none";
-  editorDir = "";
+  editorSource = null; editorParsed = null;
+}
+
+function paintModeButtons() {
+  document.getElementById("modeRaw").className = editorMode === "raw" ? "" : "ghost";
+  document.getElementById("modeSec").className = editorMode === "sections" ? "" : "ghost";
+  document.getElementById("editorText").style.display = editorMode === "raw" ? "block" : "none";
+  document.getElementById("sectionsBox").style.display = editorMode === "sections" ? "block" : "none";
+}
+
+async function setMode(m) {
+  if (!editorSource) return;
+  if (m === "sections") {
+    document.getElementById("editorStatus").textContent = "Parsing sections…";
+    try {
+      editorParsed = await api("/api/parse", {method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({content: document.getElementById("editorText").value})});
+    } catch (e) {
+      document.getElementById("editorStatus").textContent = "Section mode unavailable: " + e.message;
+      return;
+    }
+    document.getElementById("editorStatus").textContent = "";
+  }
+  editorMode = m;
+  paintModeButtons();
+  if (m === "sections") renderSections();
+}
+
+function renderSections() {
+  const box = document.getElementById("sectionsBox");
+  box.innerHTML = editorParsed.sections.map((s, i) => {
+    const isPre = !s.title;
+    return `<div class="result" data-kind="${isPre ? "preamble" : "section"}" style="margin-bottom:10px">
+      <div class="row" style="gap:6px; margin-bottom:6px">
+        ${isPre ? `<b>Top — name &amp; contact</b><span class="muted">(before first \\section)</span>`
+                : `<input data-title type="text" value="${esc(s.title)}" placeholder="Section title" style="flex:1 1 200px">
+                   <label class="chk" title="\\section* (unnumbered) vs \\section"><input data-star type="checkbox" ${s.starred ? "checked" : ""}> *</label>
+                   ${i > 1 ? `<button class="ghost" onclick="secMove(${i},-1)" style="padding:4px 10px" title="Move up">↑</button>` : ""}
+                   <button class="ghost" onclick="secMove(${i},1)" style="padding:4px 10px" title="Move down">↓</button>
+                   <button class="ghost" onclick="secDel(${i})" style="padding:4px 10px" title="Delete section">✕</button>`}
+      </div>
+      <textarea data-body rows="6" style="width:100%; font:12.5px/1.55 Consolas, monospace; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink); white-space:pre">${esc(s.body)}</textarea>
+    </div>`;
+  }).join("") + `<button class="ghost" onclick="secAdd()">+ Add section</button>`;
+}
+
+function collectSections() {
+  const cards = document.querySelectorAll("#sectionsBox .result");
+  editorParsed.sections = [...cards].map(card => ({
+    title: card.dataset.kind === "preamble" ? null : (card.querySelector("[data-title]").value || "").trim() || null,
+    starred: card.dataset.kind === "preamble" ? false : card.querySelector("[data-star]").checked,
+    body: card.querySelector("[data-body]").value,
+  }));
+}
+
+function secMove(i, d) {
+  collectSections();
+  const j = i + d;
+  const ss = editorParsed.sections;
+  if (j < 1 || j >= ss.length) return;  // preamble stays first
+  [ss[i], ss[j]] = [ss[j], ss[i]];
+  renderSections();
+}
+
+function secDel(i) {
+  collectSections();
+  if (editorParsed.sections[i].title === null) return;
+  if (!confirm("Delete this section?")) return;
+  editorParsed.sections.splice(i, 1);
+  renderSections();
+}
+
+function secAdd() {
+  collectSections();
+  editorParsed.sections.push({title: "New Section", starred: true, body: ""});
+  renderSections();
+  document.getElementById("sectionsBox").lastChild.scrollIntoView({behavior: "smooth", block: "nearest"});
+}
+
+async function currentContent() {
+  if (editorMode === "raw" || !editorParsed) return document.getElementById("editorText").value;
+  collectSections();
+  const res = await api("/api/build", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({head: editorParsed.head, sections: editorParsed.sections, tail: editorParsed.tail})});
+  return res.content;
 }
 
 async function saveTex(compile) {
-  if (!editorDir) return;
+  if (!editorSource) return;
   const status = document.getElementById("editorStatus");
   const log = document.getElementById("editorLog");
   const box = document.getElementById("editorResult");
   status.textContent = compile ? "Saving & compiling…" : "Saving…";
   log.style.display = "none"; box.innerHTML = "";
+  let content;
+  try { content = await currentContent(); }
+  catch (e) { status.textContent = "Error: " + e.message; return; }
+  if (editorSource.kind === "base") {
+    try {
+      await api("/api/base", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({content})});
+    } catch (e) { status.textContent = "Error: " + e.message; return; }
+    if (compile) { status.textContent = "Saved main.tex (backup: main.tex.bak). Compiling preview…"; doPreview(); return; }
+    status.textContent = "Saved main.tex (backup: main.tex.bak).";
+    return;
+  }
   let res;
   try {
     res = await api("/api/tex", {method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({dir: editorDir, content: document.getElementById("editorText").value, compile})});
+      body: JSON.stringify({dir: editorSource.dir, content, compile})});
   } catch (e) { status.textContent = "Error: " + e.message; return; }
   if (!compile || res.compiled) {
     status.textContent = res.compiled ? "Saved + PDF rebuilt." : "Saved (no compile).";
@@ -323,6 +442,31 @@ async function saveTex(compile) {
   status.textContent = "Saved, but compile failed — fix the LaTeX below and retry.";
   box.innerHTML = `<div class="result err"><b>tectonic error:</b> ${esc(res.error || "unknown")}</div>`;
   if (res.compile_log) { log.style.display = "block"; log.textContent = res.compile_log; }
+}
+
+async function doPreview() {
+  const status = document.getElementById("editorStatus");
+  const frame = document.getElementById("previewFrame");
+  frame.style.display = "none";
+  status.textContent = "Compiling preview…";
+  let content;
+  try { content = await currentContent(); }
+  catch (e) { status.textContent = "Error: " + e.message; return; }
+  let res;
+  try {
+    res = await api("/api/preview", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({content})});
+  } catch (e) { status.textContent = "Error: " + e.message; return; }
+  if (!res.ok) {
+    status.textContent = "Preview failed — fix the LaTeX and retry.";
+    const log = document.getElementById("editorLog");
+    document.getElementById("editorResult").innerHTML =
+      `<div class="result err"><b>tectonic error:</b> ${esc(res.error || "unknown")}</div>`;
+    if (res.compile_log) { log.style.display = "block"; log.textContent = res.compile_log; }
+    return;
+  }
+  frame.src = res.pdf_url + "?t=" + Date.now();
+  frame.style.display = "block";
+  status.textContent = "Preview below — includes unsaved changes.";
 }
 
 function toggleConsole(force) {

@@ -327,6 +327,59 @@ def test_persist_task_log(tmp_path, monkeypatch):
     assert "apply-1" in text and "line2" in text
 
 
+def test_base_tex_missing_and_present(tmp_path, monkeypatch):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "PROJECT_ROOT", tmp_path)
+    with pytest.raises(ValueError, match="No main.tex"):
+        U.get_base_tex()
+    (tmp_path / "main.tex").write_text("base content", encoding="utf-8")
+    assert U.get_base_tex()["content"] == "base content"
+
+
+def test_save_base_writes_backup(tmp_path, monkeypatch):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "PROJECT_ROOT", tmp_path)
+    (tmp_path / "main.tex").write_text("old", encoding="utf-8")
+    res = U.save_base_tex("\\documentclass{a}\n\\begin{document}\nnew\n\\end{document}")
+    assert res["ok"] and res["backup"] == "main.tex.bak"
+    assert (tmp_path / "main.tex").read_text().count("new")
+    assert (tmp_path / "main.tex.bak").read_text() == "old"
+    with pytest.raises(ValueError, match="empty"):
+        U.save_base_tex("  ")
+    with pytest.raises(ValueError, match="LaTeX"):
+        U.save_base_tex("just prose")
+
+
+def test_parse_build_helpers():
+    tex = "\\documentclass{a}\n\\begin{document}\nHi\n\\section*{S}\nBody\n\\end{document}"
+    parsed = U.parse_tex_content(tex)
+    assert len(parsed["sections"]) == 2
+    out = U.build_tex_content(parsed["head"], parsed["sections"], parsed["tail"])
+    assert "\\section*{S}" in out and "Body" in out
+    with pytest.raises(ValueError):
+        U.parse_tex_content("nope")
+    with pytest.raises(ValueError):
+        U.build_tex_content("h", [], "t")
+
+
+def test_render_preview_success_and_failure(tmp_path, monkeypatch):
+    import src.compiler as Cp
+    import src.utils as UT
+    monkeypatch.setattr(UT, "OUTPUT_ROOT", tmp_path)
+    pdf = tmp_path / ".preview" / "preview.pdf"
+    monkeypatch.setattr(Cp, "compile_tex", lambda tex: (pdf.parent.mkdir(exist_ok=True), pdf.write_bytes(b"%PDF"), pdf)[2])
+    res = U.render_preview("\\documentclass{a} x")
+    assert res["ok"] and res["pdf_url"].endswith("preview.pdf")
+
+    def boom(tex):
+        raise Cp.LatexCompileError("bad tex", log="! oops")
+    monkeypatch.setattr(Cp, "compile_tex", boom)
+    res = U.render_preview("\\documentclass{a} y")
+    assert res["ok"] is False and "oops" in res["compile_log"]
+    with pytest.raises(ValueError):
+        U.render_preview("  ")
+
+
 def test_get_sheet_url_empty_when_unconfigured(monkeypatch):
     import src.config as C
     def boom(**k):

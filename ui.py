@@ -235,6 +235,77 @@ def _linkedin_url(item: dict, title: str, company: str) -> tuple[str, bool]:
     return f"https://www.linkedin.com/jobs/search/?keywords={q}", False
 
 
+def base_tex_path() -> Path | None:
+    """Absolute path of main.tex, or None when the user hasn't added one."""
+    from src.utils import PROJECT_ROOT
+    p = PROJECT_ROOT / "main.tex"
+    return p if p.is_file() else None
+
+
+def get_base_tex() -> dict:
+    p = base_tex_path()
+    if p is None:
+        raise ValueError("No main.tex in the project folder yet — add your base resume first.")
+    return {"file": "main.tex", "content": p.read_text(encoding="utf-8")}
+
+
+def save_base_tex(content: str) -> dict:
+    p = base_tex_path()
+    if p is None:
+        raise ValueError("No main.tex in the project folder yet — add your base resume first.")
+    if not content or not content.strip():
+        raise ValueError("Refusing to save an empty resume.")
+    if len(content.encode("utf-8")) > MAX_TEX_BYTES:
+        raise ValueError("Resume too large (500 KB limit).")
+    if "\\documentclass" not in content or "\\begin{document}" not in content:
+        raise ValueError("Doesn't look like a LaTeX resume (missing documentclass/begin).")
+    bak = p.parent / "main.tex.bak"
+    try:
+        bak.write_text(p.read_text(encoding="utf-8"), encoding="utf-8")
+    except Exception:
+        pass
+    p.write_text(content, encoding="utf-8")
+    return {"ok": True, "file": "main.tex", "backup": "main.tex.bak"}
+
+
+def parse_tex_content(content: str) -> dict:
+    from src.resume_model import parse_resume
+    try:
+        return parse_resume(content).to_dict()
+    except ValueError as e:
+        raise ValueError(str(e))
+
+
+def build_tex_content(head: str, sections: list, tail: str) -> str:
+    from src.resume_model import Section, build_resume
+    if not isinstance(sections, list) or not sections:
+        raise ValueError("No sections to build from.")
+    try:
+        return build_resume(head, [Section.from_dict(s) for s in sections], tail or "")
+    except ValueError as e:
+        raise ValueError(str(e))
+
+
+def render_preview(content: str) -> dict:
+    """Compile content to a throwaway PDF for preview. Never touches real files."""
+    if not content or not content.strip():
+        raise ValueError("Nothing to preview.")
+    if len(content.encode("utf-8")) > MAX_TEX_BYTES:
+        raise ValueError("Resume too large (500 KB limit).")
+    from src.compiler import LatexCompileError, compile_tex
+    from src.utils import OUTPUT_ROOT
+    prev = OUTPUT_ROOT / ".preview"
+    prev.mkdir(parents=True, exist_ok=True)
+    tex = prev / "preview.tex"
+    tex.write_text(content, encoding="utf-8")
+    try:
+        pdf = compile_tex(tex)
+        return {"ok": True, "pdf_url": f"/output/.preview/{pdf.name}"}
+    except LatexCompileError as e:
+        return {"ok": False, "error": str(e)[:500],
+                "compile_log": (e.log or str(e))[-3000:]}
+
+
 def get_sheet_url() -> str:
     """Public spreadsheet URL from config. Empty when not configured.
 
@@ -497,6 +568,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"sheet_url": get_sheet_url()})
             elif path == "/api/version":
                 self._json({"version": UI_VERSION})
+            elif path == "/api/base":
+                try:
+                    self._json(get_base_tex())
+                except ValueError as e:
+                    self._json({"error": str(e)}, 400)
+
             elif path == "/api/tex":
                 qs = urllib.parse.parse_qs(parsed.query)
                 try:
@@ -567,6 +644,49 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     res = save_tex(body.get("dir", ""), body.get("content", ""),
                                    bool(body.get("compile", True)))
+                except ValueError as e:
+                    self._json({"error": str(e)}, 400)
+                    return
+                self._json(res, 200 if res.get("ok") else 422)
+            elif parsed.path == "/api/base":
+                body = self._read_json()
+                try:
+                    self._json(save_base_tex(body.get("content", "")))
+                except ValueError as e:
+                    self._json({"error": str(e)}, 400)
+            elif parsed.path == "/api/parse":
+                # {content} for raw text, or {source:"base"} / {source:"job",dir}
+                body = self._read_json()
+                try:
+                    if body.get("content"):
+                        content = body["content"]
+                    elif body.get("source") == "base":
+                        content = get_base_tex()["content"]
+                    else:
+                        d = _job_dir(body.get("dir", ""))
+                        if d is None:
+                            raise ValueError("Unknown job folder.")
+                        tex = find_resume_tex(d)
+                        if tex is None:
+                            raise ValueError("No resume .tex in that folder yet.")
+                        content = tex.read_text(encoding="utf-8")
+                    self._json(parse_tex_content(content))
+                except ValueError as e:
+                    self._json({"error": str(e)}, 400)
+            elif parsed.path == "/api/build":
+                body = self._read_json()
+                try:
+                    content = build_tex_content(body.get("head", ""),
+                                                body.get("sections", []),
+                                                body.get("tail", ""))
+                except ValueError as e:
+                    self._json({"error": str(e)}, 400)
+                    return
+                self._json({"content": content})
+            elif parsed.path == "/api/preview":
+                body = self._read_json()
+                try:
+                    res = render_preview(body.get("content", ""))
                 except ValueError as e:
                     self._json({"error": str(e)}, 400)
                     return
