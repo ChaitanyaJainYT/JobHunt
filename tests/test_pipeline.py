@@ -154,6 +154,82 @@ def test_apply_reuses_folder_for_same_listing(tmp_path, monkeypatch):
     assert _json.loads((prior / "job.json").read_text())["description"] == "new"
 
 
+def _full_cfg():
+    return type("C", (), {"rapidapi_key": "k", "rapidapi_host": "h",
+                          "rapidapi_job_endpoint": "e", "gemini_api_key": "g",
+                          "groq_api_key": "", "groq_model": "gm", "llm_model": "m",
+                          "rapidapi_search_endpoint": "https://e/search",
+                          "rapidapi_country": "in", "google_sheet_id": "demo",
+                          "google_credentials_file": "c", "applicant_name": "N",
+                          "linkedin_profile_url": "",
+                          "linkedin_profile_file": "profile.md"})()
+
+
+def test_honesty_gate_repairs_violation(tmp_path, monkeypatch):
+    import src.pipeline as _P
+    import src.utils as U
+    import src.tailor as T
+    import src.matcher as M
+    from src.job_api import Job as _Job
+    from src.matcher import MatchResult
+    from src.sheets import FakeClient
+    monkeypatch.setattr(U, "OUTPUT_ROOT", tmp_path)
+    monkeypatch.setattr(M, "read_base_resume",
+                        lambda *a, **k: ("Python dev.", tmp_path / "main.tex"))
+    fixed = "\\documentclass{article}\n\\begin{document}\nPython dev.\n\\end{document}\n"
+    seen = {}
+    def fake_remove(tex, bad, ev, **k):
+        seen["bad"] = list(bad)
+        return fixed
+    monkeypatch.setattr(T, "remove_unverified_claims", fake_remove)
+    rc = _P.run_apply("https://www.linkedin.com/jobs/view/7", demo=False,
+                      out=str(tmp_path / "j7"), sheet_client=FakeClient(), cfg=_full_cfg(),
+                      _overrides={
+                          "fetch_job": lambda *a, **k: _Job(
+                              "T", "Acme", "Python and Power BI role",
+                              "https://apply/7", "7", "https://u/7"),
+                          "analyze_match": lambda *a, **k: MatchResult(
+                              60, ["python"], ["Power BI"], ["python"]),
+                          "tailor_resume": lambda *a, **k: (
+                              "\\documentclass{article}\n\\begin{document}\n"
+                              "Tools: Python, Power BI.\n\\end{document}\n"),
+                          "compile_with_heal": lambda *a, **k: tmp_path / "j7" / "x.pdf",
+                      })
+    assert rc == 0
+    assert "Power BI" in seen["bad"]
+    saved = list((tmp_path / "j7").glob("*.tex"))
+    assert saved and "Power BI" not in saved[0].read_text()
+
+
+def test_honesty_gate_warns_when_unfixable(tmp_path, monkeypatch, capsys):
+    import src.pipeline as _P
+    import src.utils as U
+    import src.tailor as T
+    import src.matcher as M
+    from src.job_api import Job as _Job
+    from src.matcher import MatchResult
+    from src.sheets import FakeClient
+    monkeypatch.setattr(U, "OUTPUT_ROOT", tmp_path)
+    monkeypatch.setattr(M, "read_base_resume",
+                        lambda *a, **k: ("Python dev.", tmp_path / "main.tex"))
+    bad_tex = ("\\documentclass{article}\n\\begin{document}\n"
+               "Tools: Python, Power BI.\n\\end{document}\n")
+    monkeypatch.setattr(T, "remove_unverified_claims", lambda *a, **k: bad_tex)
+    rc = _P.run_apply("https://www.linkedin.com/jobs/view/8", demo=False,
+                      out=str(tmp_path / "j8"), sheet_client=FakeClient(), cfg=_full_cfg(),
+                      _overrides={
+                          "fetch_job": lambda *a, **k: _Job(
+                              "T", "Acme", "Python and Power BI role",
+                              "https://apply/8", "8", "https://u/8"),
+                          "analyze_match": lambda *a, **k: MatchResult(
+                              60, ["python"], ["Power BI"], ["python"]),
+                          "tailor_resume": lambda *a, **k: bad_tex,
+                          "compile_with_heal": lambda *a, **k: tmp_path / "j8" / "x.pdf",
+                      })
+    assert rc == 0  # run continues; user warned
+    assert "HONESTY WARNING" in capsys.readouterr().out
+
+
 def test_cli_routing():
     ns = normalize_args(["apply", "--url", "https://www.linkedin.com/jobs/view/99"])
     assert ns.command == "apply" and ns.url.endswith("/99")

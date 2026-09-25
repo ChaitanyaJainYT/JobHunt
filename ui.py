@@ -30,7 +30,7 @@ UI_HTML = ROOT / "ui.html"
 # Bump on EVERY ui.py/ui.html change. The page checks this on load and
 # shows a restart banner instead of cryptic 404s from a stale server.
 # (test_ui.py::test_frontend_backend_version_sync enforces the match.)
-UI_VERSION = 6
+UI_VERSION = 7
 
 _tasks: dict[str, dict] = {}
 _tasks_lock = threading.Lock()
@@ -174,6 +174,32 @@ def get_tex(job_dir_name: str) -> dict:
     return {"dir": d.name, "file": tex.name, "content": tex.read_text(encoding="utf-8")}
 
 
+def _honesty_warnings(job_dir: Path, content: str) -> list[str]:
+    """Skills the edited resume claims without base/profile evidence.
+
+    Vocabulary comes from the run's match.json; never fails (returns []).
+    Display-only: saves always go through.
+    """
+    try:
+        from src.verify import find_unverified_claims
+        from src.utils import PROJECT_ROOT
+        m = json.loads((job_dir / "match.json").read_text(encoding="utf-8"))
+        vocab = (m.get("matching_skills", []) + m.get("missing_skills", [])
+                 + m.get("core_requirements", []) + m.get("profile_skills", []))
+        base = (PROJECT_ROOT / "main.tex").read_text(encoding="utf-8")
+        if not base.strip():
+            return []
+        prof = ""
+        try:
+            from src.profile import get_candidate_context
+            prof = get_candidate_context().text
+        except Exception:
+            pass
+        return find_unverified_claims(content, [base] + ([prof] if prof else []), vocab)[:10]
+    except Exception:
+        return []
+
+
 def save_tex(job_dir_name: str, content: str, compile_pdf: bool = True) -> dict:
     d = _job_dir(job_dir_name)
     if d is None:
@@ -195,13 +221,14 @@ def save_tex(job_dir_name: str, content: str, compile_pdf: bool = True) -> dict:
         company = parts[0] if len(parts) == 2 else d.name
         tex = d / f"{resume_stem(company, applicant)}.tex"
     tex.write_text(content, encoding="utf-8")
+    warnings = _honesty_warnings(d, content)
     if not compile_pdf:
-        return {"ok": True, "file": tex.name, "compiled": False}
+        return {"ok": True, "file": tex.name, "compiled": False, "warnings": warnings}
     from src.compiler import LatexCompileError, compile_tex
     try:
         pdf = compile_tex(tex)
         return {"ok": True, "file": tex.name, "compiled": True,
-                "pdf_url": f"/output/{d.name}/{pdf.name}"}
+                "pdf_url": f"/output/{d.name}/{pdf.name}", "warnings": warnings}
     except LatexCompileError as e:
         log = (e.log or str(e))[-3000:]
         return {"ok": False, "file": tex.name, "compiled": False,

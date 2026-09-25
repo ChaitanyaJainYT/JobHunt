@@ -70,6 +70,10 @@ Copy `.env.example` to `.env` (auto-created) or run `setup`.
 
 `main.tex` stays the base, but anything in your LinkedIn profile also counts. Edit it right in the UI (**LinkedIn profile** card: editor + template loader, shows detected skill count on save) or copy `profile.md.example` to `profile.md` by hand and paste your LinkedIn About + Skills once. Every run merges it: the **match %** weighs resume + profile evidence (profile-only hits are listed separately as `profile_skills` in `match.json`), and the tailor may draw Skills-section entries from either source — never invented. Optionally set `LINKEDIN_PROFILE_URL` for headline/about context (public pages hide Skills, so the file is what matters). The UI shows the linked skill count under New application; each run audits what was used in `output/<job>/profile.json`.
 
+## Honesty guard (no false skills)
+
+Every tailored resume is verified skill-by-skill against your evidence (`main.tex` + profile): anything claimed without backing is first sent back to the LLM for a targeted removal pass, and anything surviving that is shown as a loud **HONESTY WARNING** (terminal + `run.log`) instead of shipping silently. The UI editor runs the same check on every save and flags unverified skills in amber. Word-boundary matching plus an alias table (`AWS` = `Amazon Web Services`, `Power BI` = `PowerBI`, `AI` ≠ the "ai" in "said") keep false alarms out.
+
 ## One listing, one folder
 
 The same posting reached via LinkedIn URL and via JSearch search shares the LinkedIn ID in its apply link — runs detect that and **update the existing folder in place** instead of spawning `Company_X` + `Company_<token>` duplicates (hidden dupes stay restorable via “Show hidden”).

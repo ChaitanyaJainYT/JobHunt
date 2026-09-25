@@ -28,7 +28,7 @@ def test_tailor_includes_profile(monkeypatch):
     monkeypatch.setattr(llm, "complete_text", fake)
     T.tailor_resume(BASE, "T", "C", [], [], api_key="x", profile_text="Kubernetes expert")
     assert "Kubernetes expert" in seen["prompt"]
-    assert "Skills section may list skills" in seen["prompt"]
+    assert "DOES NOT HAVE" in seen["prompt"]
 
 
 def test_tailor_rejects_non_tex(monkeypatch):

@@ -527,14 +527,17 @@ const JobEd = makeEditor("JobEd",
   async (src, text, compile) => api("/api/tex", {method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({dir: src.dir, content: text, compile})}),
   (res, compile, ui) => {
+    const warn = (res.warnings && res.warnings.length)
+      ? `<div class="result err" style="border-left-color:#b7791f"><b>Honesty check:</b> not in your base resume/profile — ${esc(res.warnings.join(", "))}. Remove or verify before submitting.</div>` : "";
     if (!compile || res.compiled) {
       ui.status.textContent = res.compiled ? "Saved + PDF rebuilt." : "Saved (no compile).";
       if (res.pdf_url) ui.box.innerHTML = `<div class="result"><a href="${res.pdf_url}" target="_blank"><b>Open rebuilt PDF</b></a></div>`;
+      ui.box.innerHTML += warn;
       loadJobs();
       return;
     }
     ui.status.textContent = "Saved, but compile failed — fix the LaTeX below and retry.";
-    ui.box.innerHTML = `<div class="result err"><b>tectonic error:</b> ${esc(res.error || "unknown")}</div>`;
+    ui.box.innerHTML = `<div class="result err"><b>tectonic error:</b> ${esc(res.error || "unknown")}</div>` + warn;
     if (res.compile_log) { ui.log.style.display = "block"; ui.log.textContent = res.compile_log; }
   });
 
@@ -788,7 +791,7 @@ async function runConsole() {
 async function checkVersion() {
   try {
     const {version} = await api("/api/version");
-    if (version !== 6) throw new Error("mismatch");
+    if (version !== 7) throw new Error("mismatch");
   } catch (e) {
     document.getElementById("staleBanner").style.display = "block";
   }

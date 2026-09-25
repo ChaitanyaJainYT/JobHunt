@@ -459,6 +459,35 @@ def test_profile_file_roundtrip(tmp_path, monkeypatch):
     assert "## Skills" in tpl["content"]
 
 
+def _tex_job(tmp_path, monkeypatch, tex="Tools: Power BI."):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "PROJECT_ROOT", tmp_path)
+    (tmp_path / "main.tex").write_text("Python dev.", encoding="utf-8")
+    d = tmp_path / "HP_1"
+    d.mkdir(exist_ok=True)
+    (d / "HP_Resume.tex").write_text(tex, encoding="utf-8")
+    import json as _json
+    (d / "match.json").write_text(_json.dumps({
+        "match_score": 60, "matching_skills": ["python"],
+        "missing_skills": ["Power BI"], "core_requirements": []}))
+
+
+def test_save_tex_warns_on_unverified(tmp_path, monkeypatch):
+    import src.utils as UT
+    _tex_job(tmp_path, monkeypatch)
+    monkeypatch.setattr(UT, "OUTPUT_ROOT", tmp_path)
+    res = U.save_tex("HP_1", "Tools: Python, Power BI.", compile_pdf=False)
+    assert res["ok"] and res["warnings"] == ["Power BI"]
+
+
+def test_save_tex_quiet_when_clean(tmp_path, monkeypatch):
+    import src.utils as UT
+    _tex_job(tmp_path, monkeypatch, tex="Tools: Python.")
+    monkeypatch.setattr(UT, "OUTPUT_ROOT", tmp_path)
+    res = U.save_tex("HP_1", "Tools: Python.", compile_pdf=False)
+    assert res["warnings"] == []
+
+
 def test_get_sheet_url_empty_when_unconfigured(monkeypatch):
     import src.config as C
     def boom(**k):

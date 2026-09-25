@@ -170,6 +170,32 @@ def run_apply(url: str, demo: bool = False, out: str | None = None,
                      match.core_requirements, api_key=cfg.gemini_api_key,
                      model=cfg.llm_model, groq_key=cfg.groq_api_key,
                      groq_model=cfg.groq_model, profile_text=prof.text)
+        # --- 3b. Honesty gate: no unverified skill claims ship silently ---
+        try:
+            from src.verify import find_unverified_claims
+            vocab = (match.matching_skills + match.missing_skills
+                     + match.core_requirements + match.profile_skills)
+            evidence = [base_tex] + ([prof.text] if prof.text else [])
+            bad = find_unverified_claims(tex, evidence, vocab)
+            if bad and not demo:
+                print(f"\n[WARN] Tailored resume claims skills without evidence: "
+                      f"{', '.join(bad)} — attempting repair.")
+                log.warning(f"unverified claims: {bad}; attempting repair")
+                from src.tailor import remove_unverified_claims
+                tex = remove_unverified_claims(
+                    tex, bad, "\n\n".join(evidence), api_key=cfg.gemini_api_key,
+                    model=cfg.llm_model, groq_key=cfg.groq_api_key,
+                    groq_model=cfg.groq_model)
+                bad = find_unverified_claims(tex, evidence, vocab)
+            if bad:
+                print("\n" + "=" * 64)
+                print("HONESTY WARNING: the resume still claims skills with no evidence")
+                print(f"in your resume/profile: {', '.join(bad)}")
+                print("Review before submitting — edit in the UI resume editor.")
+                print("=" * 64)
+                log.warning(f"unverified claims remain: {bad}")
+        except Exception as e:
+            log.warning(f"honesty check skipped: {e}")  # never fail a run on the checker
         tex_path = save_tailored(tex, folder, job.company,
                                    applicant=cfg.applicant_name)
     except Exception as e:
