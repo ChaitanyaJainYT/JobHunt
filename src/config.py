@@ -34,6 +34,8 @@ class AppConfig:
     google_sheet_id: str = ""
     google_credentials_file: str = "credentials.json"
     applicant_name: str = "Chaitanya Jain"
+    linkedin_profile_url: str = ""
+    linkedin_profile_file: str = "profile.md"
     demo: bool = False
 
     @property
@@ -55,6 +57,8 @@ _MANAGED_KEYS: list[tuple[str, str, bool, str]] = [
     ("GOOGLE_SHEET_ID", "google_sheet_id", True, "Google Sheet ID (from sheet URL between /d/ and /edit)"),
     ("GOOGLE_CREDENTIALS_FILE", "google_credentials_file", False, "Google OAuth credentials file [credentials.json]"),
     ("APPLICANT_NAME", "applicant_name", False, "Your name for resume filenames [Chaitanya Jain]"),
+    ("LINKEDIN_PROFILE_URL", "linkedin_profile_url", False, "LinkedIn profile URL (optional, Enter to skip)"),
+    ("LINKEDIN_PROFILE_FILE", "linkedin_profile_file", False, "Local profile supplement [profile.md]"),
 ]
 
 
@@ -128,6 +132,8 @@ def run_setup_wizard() -> AppConfig:
             values[env_key] = "credentials.json"
         elif env_key == "APPLICANT_NAME" and not values.get(env_key):
             values[env_key] = "Chaitanya Jain"
+        elif env_key == "LINKEDIN_PROFILE_FILE" and not values.get(env_key):
+            values[env_key] = "profile.md"
 
     _write_dotenv(ENV_PATH, values)
     print(f"\nSaved to {ENV_PATH}. You can re-run with: python agent.py doctor")
@@ -155,6 +161,8 @@ def _from_values(values: dict[str, str], demo: bool) -> AppConfig:
         google_sheet_id=get("GOOGLE_SHEET_ID"),
         google_credentials_file=get("GOOGLE_CREDENTIALS_FILE", "credentials.json"),
         applicant_name=get("APPLICANT_NAME", "Chaitanya Jain"),
+        linkedin_profile_url=get("LINKEDIN_PROFILE_URL"),
+        linkedin_profile_file=get("LINKEDIN_PROFILE_FILE", "profile.md"),
         demo=demo,
     )
 

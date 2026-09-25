@@ -45,6 +45,21 @@ def test_resume_read_fallback_to_sample():
     assert path.exists()
 
 
+def test_match_includes_profile(monkeypatch):
+    seen = {}
+    def fake(prompt, api_key="", model="", **k):
+        seen["prompt"] = prompt
+        return {"match_score": 80, "matching_skills": ["python", "aws"],
+                "missing_skills": [], "core_requirements": ["python"],
+                "profile_skills": ["aws"]}
+    monkeypatch.setattr(llm, "complete_json", fake)
+    m = M.analyze_match("need python aws", "resume python", api_key="x",
+                        profile_text="AWS certified")
+    assert "AWS certified" in seen["prompt"]
+    assert m.profile_skills == ["aws"]
+    assert "via LinkedIn: aws" in M.summary_line(m)
+
+
 def test_match_handles_garbage_score(monkeypatch):
     monkeypatch.setattr(llm, "complete_json", _mock_complete({
         "match_score": "high", "matching_skills": "notalist",

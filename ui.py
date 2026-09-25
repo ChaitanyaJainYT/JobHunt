@@ -30,7 +30,7 @@ UI_HTML = ROOT / "ui.html"
 # Bump on EVERY ui.py/ui.html change. The page checks this on load and
 # shows a restart banner instead of cryptic 404s from a stale server.
 # (test_ui.py::test_frontend_backend_version_sync enforces the match.)
-UI_VERSION = 4
+UI_VERSION = 6
 
 _tasks: dict[str, dict] = {}
 _tasks_lock = threading.Lock()
@@ -356,6 +356,62 @@ def render_preview(content: str) -> dict:
                 "compile_log": (e.log or str(e))[-3000:]}
 
 
+def profile_status() -> dict:
+    """LinkedIn supplement state for the UI. Never raises, never leaks keys."""
+    try:
+        from src.config import load_config
+        from src.profile import get_candidate_context
+        cfg = load_config(auto_wizard=False, demo=False)
+        prof = get_candidate_context(cfg.linkedin_profile_url, cfg.linkedin_profile_file)
+    except Exception:
+        return {"source": "none", "skills": [], "total": 0}
+    return {"source": prof.source, "skills": prof.skills[:12], "total": len(prof.skills)}
+
+
+MAX_PROFILE_BYTES = 100_000
+
+
+def _profile_file_path() -> Path:
+    from src.utils import PROJECT_ROOT
+    try:
+        from src.config import load_config
+        name = load_config(auto_wizard=False, demo=True).linkedin_profile_file or "profile.md"
+    except Exception:
+        name = "profile.md"
+    p = Path(name)
+    return p if p.is_absolute() else PROJECT_ROOT / name
+
+
+def get_profile_file() -> dict:
+    p = _profile_file_path()
+    try:
+        content = p.read_text(encoding="utf-8")
+    except Exception:
+        content = ""
+    return {"file": p.name, "exists": bool(content), "content": content}
+
+
+def get_profile_template() -> dict:
+    from src.utils import PROJECT_ROOT
+    ex = PROJECT_ROOT / "profile.md.example"
+    try:
+        return {"content": ex.read_text(encoding="utf-8")}
+    except Exception:
+        raise ValueError("profile.md.example not found.")
+
+
+def save_profile_file(content: str) -> dict:
+    from src.profile import load_local_profile
+    if not content or not content.strip():
+        raise ValueError("Refusing to save an empty profile (delete the file to opt out).")
+    if len(content.encode("utf-8")) > MAX_PROFILE_BYTES:
+        raise ValueError("Profile too large (100 KB limit).")
+    p = _profile_file_path()
+    p.write_text(content, encoding="utf-8")
+    _, skills = load_local_profile(str(p))
+    return {"ok": True, "file": p.name, "skills": skills}
+
+
 def get_sheet_url() -> str:
     """Public spreadsheet URL from config. Empty when not configured.
 
@@ -618,6 +674,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"jobs": list_jobs(include_deleted=inc)})
             elif path == "/api/sheet":
                 self._json({"sheet_url": get_sheet_url()})
+            elif path == "/api/profile":
+                self._json(profile_status())
+            elif path == "/api/profile-file":
+                self._json(get_profile_file())
+            elif path == "/api/profile-template":
+                try:
+                    self._json(get_profile_template())
+                except ValueError as e:
+                    self._json({"error": str(e)}, 400)
             elif path == "/api/version":
                 self._json({"version": UI_VERSION})
             elif path == "/api/base":
@@ -716,6 +781,12 @@ class Handler(BaseHTTPRequestHandler):
                 body = self._read_json()
                 try:
                     self._json(save_base_tex(body.get("content", "")))
+                except ValueError as e:
+                    self._json({"error": str(e)}, 400)
+            elif parsed.path == "/api/profile-file":
+                body = self._read_json()
+                try:
+                    self._json(save_profile_file(body.get("content", "")))
                 except ValueError as e:
                     self._json({"error": str(e)}, 400)
             elif parsed.path == "/api/parse":

@@ -270,6 +270,51 @@ def _is_linkedin_numeric_url(url: str) -> bool:
     return bool(re.search(r"linkedin\.com/jobs/view/\d+", url or ""))
 
 
+def listing_key(company: str, title: str, apply_link: str = "", source_url: str = "") -> str:
+    """Canonical identity of a job listing for dedup.
+
+    Same LinkedIn posting reached via numeric ID or JSearch token shares the
+    LinkedIn ID embedded in its apply/source URL -> identical key. Otherwise
+    falls back to normalized company+title.
+    """
+    for u in (apply_link or "", source_url or ""):
+        m = re.search(r"linkedin\.com/jobs/view/(?:[^/\s?]*?-)?(\d{6,})", u)
+        if m:
+            return "li:" + m.group(1)
+    norm = lambda s: re.sub(r"[^a-z0-9]+", "", (s or "").lower())
+    return f"ct:{norm(company)}|{norm(title)}"
+
+
+def find_existing_listing(company: str, title: str, apply_link: str = "",
+                          source_url: str = "", skip: set[str] | None = None) -> Path | None:
+    """Existing output dir holding the same listing (tombstones ignored)."""
+    import json as _json
+    from src.utils import OUTPUT_ROOT
+    if not OUTPUT_ROOT.exists():
+        return None
+    skip = set(skip or set())
+    try:  # honor UI soft-deletes without importing ui (would be circular)
+        data = _json.loads((OUTPUT_ROOT / ".deleted.json").read_text(encoding="utf-8"))
+        skip |= set(data.get("deleted", []))
+    except Exception:
+        pass
+    want = listing_key(company, title, apply_link, source_url)
+    for d in OUTPUT_ROOT.iterdir():
+        if not d.is_dir() or d.name in skip:
+            continue
+        jf = d / "job.json"
+        if not jf.exists():
+            continue
+        try:
+            j = _json.loads(jf.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if listing_key(j.get("company", ""), j.get("title", ""),
+                       j.get("apply_link", ""), j.get("source_url", "")) == want:
+            return d
+    return None
+
+
 def _host_knows_linkedin_ids(host: str, endpoint: str) -> bool:
     return "linkedin" in f"{host} {endpoint}".lower()
 

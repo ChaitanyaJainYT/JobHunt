@@ -89,7 +89,18 @@ def run_apply(url: str, demo: bool = False, out: str | None = None,
             print(f"\n[ERROR] Job fetch failed: {e}")
             return 3
 
-    folder = Path(out) if out else ensure_output_dir(job.company, job_id)
+    if out:
+        folder = Path(out)
+    else:
+        # Same listing via another ID (LinkedIn URL vs JSearch token) must
+        # update one folder, not spawn a duplicate.
+        from src.job_api import find_existing_listing
+        folder = find_existing_listing(job.company, job.title, job.apply_link,
+                                       job.source_url)
+        if folder is not None:
+            print(f"[INFO] Same listing as {folder.name}; updating in place.")
+        else:
+            folder = ensure_output_dir(job.company, job_id)
     folder.mkdir(parents=True, exist_ok=True)
     log = get_logger("apply", folder / "run.log")
 
@@ -110,20 +121,35 @@ def run_apply(url: str, demo: bool = False, out: str | None = None,
         except Exception:
             pass
 
+    # --- 1b. Candidate LinkedIn profile (optional supplement, never fatal) ---
+    from src.profile import get_candidate_context
+    prof = get_candidate_context(getattr(cfg, "linkedin_profile_url", ""),
+                                 getattr(cfg, "linkedin_profile_file", "profile.md"))
+    try:
+        (folder / "profile.json").write_text(json.dumps(
+            {"source": prof.source, "skills": prof.skills}, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+    if prof.skills:
+        print(f"[INFO] LinkedIn profile ({prof.source}): {len(prof.skills)} skills merged.")
+        log.info(f"profile source={prof.source} skills={len(prof.skills)}")
+
     # --- 2. Match ---
     try:
         if demo:
             mdata = json.loads((FIXTURES / "sample_match.json").read_text(encoding="utf-8"))
             match = MatchResult(mdata["match_score"], mdata["matching_skills"],
-                                mdata["missing_skills"], mdata["core_requirements"])
+                                mdata["missing_skills"], mdata.get("core_requirements", []))
         elif resumed_match is not None:
             match = MatchResult(resumed_match["match_score"], resumed_match["matching_skills"],
-                                resumed_match["missing_skills"], resumed_match["core_requirements"])
+                                resumed_match["missing_skills"],
+                                resumed_match.get("core_requirements", []),
+                                resumed_match.get("profile_skills", []))
         else:
             fn = _ov.get("analyze_match", analyze_match)
             match = fn(job.description, base_tex, api_key=cfg.gemini_api_key,
                        model=cfg.llm_model, groq_key=cfg.groq_api_key,
-                       groq_model=cfg.groq_model)
+                       groq_model=cfg.groq_model, profile_text=prof.text)
         save_match(match, folder)
     except Exception as e:
         print(f"\n[ERROR] Skill match failed: {e}")
@@ -143,7 +169,7 @@ def run_apply(url: str, demo: bool = False, out: str | None = None,
             tex = fn(base_tex, job.title, job.company, match.missing_skills,
                      match.core_requirements, api_key=cfg.gemini_api_key,
                      model=cfg.llm_model, groq_key=cfg.groq_api_key,
-                     groq_model=cfg.groq_model)
+                     groq_model=cfg.groq_model, profile_text=prof.text)
         tex_path = save_tailored(tex, folder, job.company,
                                    applicant=cfg.applicant_name)
     except Exception as e:

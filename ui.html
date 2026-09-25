@@ -42,19 +42,28 @@
   .icon-link:hover { background:var(--accbg); }
   .icon-link + .icon-link { margin-left:4px; }
   .icon-link svg { width:17px; height:17px; display:block; }
-  #consoleFab { position:fixed; right:18px; bottom:18px; z-index:60; border-radius:999px; padding:10px 16px; display:flex; gap:8px; align-items:center; box-shadow:0 4px 14px rgba(0,0,0,.25); font-weight:600; }
-  #consoleFab svg { width:16px; height:16px; }
-  #consoleSidebar { position:fixed; top:0; right:0; height:100vh; width:min(430px,94vw); background:var(--card); border-left:1px solid var(--line); box-shadow:-8px 0 24px rgba(0,0,0,.18); transform:translateX(105%); transition:transform .25s ease; z-index:55; display:flex; flex-direction:column; }
-  #consoleSidebar.open { transform:none; }
+  /* Slide-in panels: all four dock LEFT beside the 60px nav rail (never under it),
+     minimized by default, one open at a time. Rail sits above (z 65 > 55). */
+  .sidebar { position:fixed; top:0; left:60px; height:100vh; width:min(480px,calc(100vw - 60px)); background:var(--card); border-right:1px solid var(--line); box-shadow:8px 0 24px rgba(0,0,0,.18); transform:translateX(-110%); transition:transform .25s ease; z-index:55; display:flex; flex-direction:column; }
+  .sidebar.open { transform:none; }
   .sidebar .side-head { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 0; gap:8px; }
   .sidebar .side-head h2 { margin:0; }
-  .sidebar .side-body { padding:12px 16px 16px; overflow-y:auto; }
+  .sidebar .side-body { flex:1; display:flex; flex-direction:column; gap:8px; min-height:0; padding:12px 16px 16px; overflow-y:auto; }
   #consoleSidebar #consoleLog { max-height:52vh; }
-  #liFab { position:fixed; left:18px; bottom:18px; z-index:60; border-radius:999px; padding:10px 16px; display:flex; gap:8px; align-items:center; box-shadow:0 4px 14px rgba(0,0,0,.25); font-weight:600; background:var(--acc); color:#fff; border:0; cursor:pointer; font-size:14px; }
-  #liFab svg { width:16px; height:16px; }
-  #liSidebar { position:fixed; top:0; left:0; height:100vh; width:min(480px,94vw); background:var(--card); border-right:1px solid var(--line); box-shadow:8px 0 24px rgba(0,0,0,.18); transform:translateX(-105%); transition:transform .25s ease; z-index:55; display:flex; flex-direction:column; }
-  #liSidebar.open { transform:none; }
-  #liSidebar .side-body { flex:1; display:flex; flex-direction:column; gap:8px; min-height:0; }
+  @media (max-width: 720px) {
+    .sidebar { left:0; width:100vw; }
+  }
+  body { padding-left:60px; }
+  #navRail { position:fixed; top:0; left:0; height:100vh; width:60px; background:var(--header); z-index:65; display:flex; flex-direction:column; align-items:center; padding:14px 0; gap:6px; }
+  #navRail .nav-btn { width:44px; height:44px; border:0; border-radius:12px; background:transparent; color:var(--headerink); opacity:.75; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; }
+  #navRail .nav-btn:hover { opacity:1; background:rgba(128,128,128,.18); }
+  #navRail .nav-btn svg { width:21px; height:21px; }
+  #navRail .nav-sep { width:28px; border-top:1px solid rgba(128,128,128,.35); margin:4px 0; }
+  @media (max-width: 720px) {
+    body { padding-left:0; padding-bottom:64px; }
+    #navRail { top:auto; bottom:0; left:0; height:60px; width:100vw; flex-direction:row; justify-content:center; padding:0 10px; }
+    #navRail .nav-sep { width:0; height:28px; border-top:0; border-left:1px solid rgba(128,128,128,.35); margin:0 4px; }
+  }
   .combo-wrap { position:relative; flex:0 0 150px; }
   .combo-wrap input { width:100%; }
   .combo-drop { position:absolute; top:calc(100% + 4px); left:0; right:0; max-height:230px; overflow-y:auto; background:var(--card); border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 20px rgba(0,0,0,.2); z-index:70; }
@@ -72,6 +81,12 @@
   </div>
   <button id="themeBtn" class="ghost" onclick="toggleTheme()" title="Toggle dark / light mode">Dark</button>
 </header>
+<nav id="navRail" aria-label="Panels (all minimized by default)">
+  <button class="nav-btn" onclick="toggleBase()" title="Edit base resume" aria-label="Edit base resume"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 2.5 13.5 4.5 5.5 12.5l-3.5 1 1-3.5z"/></svg></button>
+  <button class="nav-btn" onclick="toggleProfile()" title="LinkedIn profile" aria-label="LinkedIn profile"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="5" r="2.5"/><path d="M3 13.5c.8-2.8 2.8-4 5-4s4.2 1.2 5 4"/></svg></button>
+  <button class="nav-btn" onclick="toggleJobs()" title="Job search panel" aria-label="Job search panel"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="11" height="9" rx="1.5"/><path d="M6 4.5V3h4v1.5M2.5 8h11"/></svg></button>
+  <button class="nav-btn" onclick="toggleConsole()" title="Console" aria-label="Console"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3.5h12v9H2z"/><path d="M5 6.5 7 8l-2 1.5M8.5 10H11"/></svg></button>
+</nav>
 <main>
   <div id="staleBanner" style="display:none; background:#fdecea; color:#b3261e; border:1px solid #f5c6c0; border-radius:12px; padding:12px 16px; margin-bottom:16px;">
     <b>Server is outdated.</b> This page is newer than the running backend (it serves the page from disk but lacks the new API routes).
@@ -79,24 +94,17 @@
   </div>
 
 
-  <section class="card">
+  <section class="card" id="newCard">
     <h2>New application</h2>
     <div class="row">
       <input id="url" type="url" placeholder="https://www.linkedin.com/jobs/view/…" autocomplete="off">
       <label class="chk" title="Reuse saved job + match data, skip fetch and match calls"><input id="resume" type="checkbox"> resume</label>
       <button id="applyBtn" onclick="startApply()">Prepare application</button>
     </div>
+    <div id="profileLine" class="muted" style="margin-top:8px"></div>
     <div id="applyStatus" class="muted" style="margin-top:8px"></div>
     <pre id="applyLog" class="log" style="display:none"></pre>
     <div id="applyResult"></div>
-  </section>
-
-  <section class="card">
-    <h2>Base resume <span class="muted" style="font-weight:normal; text-transform:none">main.tex — starting point for every tailor</span></h2>
-    <div class="row">
-      <button onclick="openBaseEditor()">Edit base resume</button>
-      <span class="muted">Raw or section-by-section editing, live PDF preview. Saving keeps the previous version as <b>main.tex.bak</b>.</span>
-    </div>
   </section>
 
   <section class="card">
@@ -121,15 +129,15 @@
     <h2>Edit resume — <span id="editorFile" style="font-family:monospace; font-size:14px"></span></h2>
     <div class="muted" style="margin-bottom:8px">Fix wording, add a line, repair LaTeX — then save. “Save &amp; compile” rebuilds the PDF (jobs table refreshes). “Preview” compiles without saving.</div>
     <div class="row" style="gap:6px; margin-bottom:10px">
-      <button id="modeRaw" onclick="setMode('raw')">Raw TeX</button>
-      <button id="modeSec" class="ghost" onclick="setMode('sections')">Sections</button>
+      <button id="modeRaw" onclick="JobEd.setMode('raw')">Raw TeX</button>
+      <button id="modeSec" class="ghost" onclick="JobEd.setMode('sections')">Sections</button>
     </div>
     <textarea id="editorText" spellcheck="false" style="width:100%; min-height:380px; font:12.5px/1.55 Consolas, monospace; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink); white-space:pre"></textarea>
     <div id="sectionsBox" style="display:none"></div>
     <div class="row" style="margin-top:10px">
-      <button onclick="saveTex(false)">Save only</button>
-      <button onclick="saveTex(true)">Save &amp; compile PDF</button>
-      <button class="ghost" onclick="doPreview()">Preview PDF</button>
+      <button onclick="JobEd.save(false)">Save only</button>
+      <button onclick="JobEd.save(true)">Save &amp; compile PDF</button>
+      <button class="ghost" onclick="JobEd.preview()">Preview PDF</button>
       <button class="ghost" onclick="closeEditor()">Close</button>
       <span id="editorStatus" class="muted"></span>
     </div>
@@ -139,10 +147,45 @@
   </section>
 
 </main>
-<button id="liFab" onclick="toggleJobs()" title="Browse LinkedIn Jobs">
-  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="11" height="9" rx="1.5"/><path d="M6 4.5V3h4v1.5M2.5 8h11"/></svg>
-  LinkedIn Jobs
-</button>
+<aside id="baseSidebar" class="sidebar" aria-label="Base resume">
+  <div class="side-head">
+    <h2>Base resume</h2>
+    <button class="ghost" onclick="toggleBase(false)" style="padding:6px 12px" aria-label="Minimize base resume panel">×</button>
+  </div>
+  <div class="side-body">
+    <div class="muted">main.tex — starting point for every tailor. Saving keeps the previous version as <b>main.tex.bak</b>.</div>
+    <div class="row" style="gap:6px; margin-bottom:10px">
+      <button id="baseModeRaw" onclick="BaseEd.setMode('raw')">Raw TeX</button>
+      <button id="baseModeSec" class="ghost" onclick="BaseEd.setMode('sections')">Sections</button>
+    </div>
+    <textarea id="baseText" spellcheck="false" placeholder="Loading…" style="width:100%; min-height:300px; font:12.5px/1.55 Consolas, monospace; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink); white-space:pre"></textarea>
+    <div id="baseSectionsBox" style="display:none"></div>
+    <div class="row" style="margin-top:10px">
+      <button onclick="BaseEd.save(false)">Save only</button>
+      <button onclick="BaseEd.save(true)">Save &amp; preview</button>
+      <button class="ghost" onclick="BaseEd.preview()">Preview PDF</button>
+      <span id="baseStatus" class="muted"></span>
+    </div>
+    <iframe id="basePreviewFrame" title="Base resume preview" style="display:none; width:100%; min-height:420px; border:1px solid var(--line); border-radius:8px; margin-top:10px"></iframe>
+    <pre id="baseLog" class="log" style="display:none; margin-top:10px"></pre>
+    <div id="baseResult"></div>
+  </div>
+</aside>
+<aside id="profileSidebar" class="sidebar" aria-label="LinkedIn profile">
+  <div class="side-head">
+    <h2>LinkedIn profile</h2>
+    <button class="ghost" onclick="toggleProfile(false)" style="padding:6px 12px" aria-label="Minimize profile panel">×</button>
+  </div>
+  <div class="side-body">
+    <div class="muted" style="margin-bottom:8px">Paste your LinkedIn About + a <span style="font-family:monospace">## Skills</span> list once — it counts toward match % and the Skills section. <span id="profileSkills" class="muted"></span></div>
+    <textarea id="profileText" spellcheck="false" placeholder="Loading…" style="width:100%; min-height:220px; font:13px/1.55 system-ui, sans-serif; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink); white-space:pre-wrap"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button onclick="saveProfile()">Save profile</button>
+      <button class="ghost" onclick="loadTemplate()">Load template</button>
+      <span id="profileStatus" class="muted"></span>
+    </div>
+  </div>
+</aside>
 <aside id="liSidebar" class="sidebar" aria-label="LinkedIn Jobs">
   <div class="side-head">
     <h2>LinkedIn Jobs</h2>
@@ -173,10 +216,6 @@
     <div class="muted">Found something? Paste its posting URL into <b>New application</b> — or hit <b>Prepare</b> on any result above.</div>
   </div>
 </aside>
-<button id="consoleFab" onclick="toggleConsole()" title="Open console">
-  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3.5h12v9H2z"/><path d="M5 6.5 7 8l-2 1.5M8.5 10H11"/></svg>
-  Console
-</button>
 <aside id="consoleSidebar" class="sidebar" aria-label="Console">
   <div class="side-head">
     <h2>Console</h2>
@@ -316,212 +355,250 @@ async function loadSheet() {
   } catch (e) { /* sheet not configured — link stays hidden */ }
 }
 
-let editorSource = null;   // {kind:"job",dir} | {kind:"base"}
-let editorMode = "raw";
-let editorParsed = null; // {head, tail, sections} in sections mode
+/* Shared resume editor (Raw TeX + Sections + preview). One factory, two
+   instances: JobEd drives the main editor card, BaseEd the base sidebar.
+   Same features everywhere — no parallel implementations to drift apart. */
+function makeEditor(name, E, load, persist, afterSave) {
+  const S = {source: null, mode: "raw", parsed: null};
+  const $ = id => document.getElementById(id);
 
-async function openEditor(dir) { await openResume({kind: "job", dir}); }
-async function openBaseEditor() { await openResume({kind: "base"}); }
-
-async function openResume(src) {
-  editorSource = src; editorMode = "raw"; editorParsed = null;
-  document.getElementById("editorCard").style.display = "block";
-  document.getElementById("editorFile").textContent = src.kind === "base" ? "main.tex" : src.dir + "/…";
-  document.getElementById("editorText").value = "Loading…";
-  document.getElementById("editorResult").innerHTML = "";
-  document.getElementById("editorLog").style.display = "none";
-  document.getElementById("previewFrame").style.display = "none";
-  document.getElementById("editorStatus").textContent = "";
-  paintModeButtons();
-  try {
-    const t = src.kind === "base"
-      ? await api("/api/base")
-      : await api("/api/tex?dir=" + encodeURIComponent(src.dir));
-    if (src.kind === "job") document.getElementById("editorFile").textContent = src.dir + "/" + t.file;
-    document.getElementById("editorText").value = t.content;
-  } catch (e) {
-    document.getElementById("editorText").value = "";
-    document.getElementById("editorStatus").textContent = "Error: " + e.message;
+  function paint() {
+    $(E.modeRaw).className = S.mode === "raw" ? "" : "ghost";
+    $(E.modeSec).className = S.mode === "sections" ? "" : "ghost";
+    $(E.text).style.display = S.mode === "raw" ? "block" : "none";
+    $(E.sectionsBox).style.display = S.mode === "sections" ? "block" : "none";
   }
-  document.getElementById("editorCard").scrollIntoView({behavior: "smooth", block: "start"});
-}
 
-function closeEditor() {
-  document.getElementById("editorCard").style.display = "none";
-  editorSource = null; editorParsed = null;
-}
-
-function paintModeButtons() {
-  document.getElementById("modeRaw").className = editorMode === "raw" ? "" : "ghost";
-  document.getElementById("modeSec").className = editorMode === "sections" ? "" : "ghost";
-  document.getElementById("editorText").style.display = editorMode === "raw" ? "block" : "none";
-  document.getElementById("sectionsBox").style.display = editorMode === "sections" ? "block" : "none";
-}
-
-async function setMode(m) {
-  if (!editorSource) return;
-  if (m === "sections") {
-    document.getElementById("editorStatus").textContent = "Parsing sections…";
+  async function open(src) {
+    S.source = src; S.mode = "raw"; S.parsed = null;
+    if (E.card) $(E.card).style.display = "block";
+    if (E.file) $(E.file).textContent = src.label || "…";
+    $(E.text).value = "Loading…";
+    $(E.result).innerHTML = "";
+    $(E.log).style.display = "none";
+    $(E.frame).style.display = "none";
+    $(E.status).textContent = "";
+    paint();
     try {
-      editorParsed = await api("/api/parse", {method: "POST", headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({content: document.getElementById("editorText").value})});
+      const t = await load(src);
+      if (E.file) $(E.file).textContent = t.file || src.label || "";
+      $(E.text).value = t.content;
     } catch (e) {
-      document.getElementById("editorStatus").textContent = "Section mode unavailable: " + e.message;
+      $(E.text).value = "";
+      $(E.status).textContent = "Error: " + e.message;
+    }
+    if (E.card) $(E.card).scrollIntoView({behavior: "smooth", block: "start"});
+  }
+
+  function close() {
+    if (E.card) $(E.card).style.display = "none";
+    S.source = null; S.parsed = null;
+  }
+
+  async function setMode(m) {
+    if (!S.source) return;
+    if (m === "sections") {
+      $(E.status).textContent = "Parsing sections…";
+      try {
+        S.parsed = await api("/api/parse", {method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({content: $(E.text).value})});
+      } catch (e) {
+        $(E.status).textContent = "Section mode unavailable: " + e.message;
+        return;
+      }
+      $(E.status).textContent = "";
+    }
+    S.mode = m;
+    paint();
+    if (m === "sections") render();
+  }
+
+  function render() {
+    $(E.sectionsBox).innerHTML = S.parsed.sections.map((s, i) => {
+      const isPre = !s.title;
+      const fmt = s.format || "latex";
+      return `<div class="result" data-kind="${isPre ? "preamble" : "section"}" style="margin-bottom:10px">
+        <div class="row" style="gap:6px; margin-bottom:6px">
+          ${isPre ? `<b>Top — name &amp; contact</b><span class="muted">(before first \\section)</span>`
+                  : `<input data-title type="text" value="${esc(s.title)}" placeholder="Section title" style="flex:1 1 200px">
+                     <label class="chk" title="\\section* (unnumbered) vs \\section"><input data-star type="checkbox" ${s.starred ? "checked" : ""}> *</label>
+                     ${i > 1 ? `<button class="ghost" onclick="${name}.secMove(${i},-1)" style="padding:4px 10px" title="Move up">↑</button>` : ""}
+                     <button class="ghost" onclick="${name}.secMove(${i},1)" style="padding:4px 10px" title="Move down">↓</button>
+                     <button class="ghost" onclick="${name}.secDel(${i})" style="padding:4px 10px" title="Delete section">✕</button>`}
+          <select data-format title="How this box is converted to LaTeX on save/preview" style="padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink)">${fmtOptions(fmt)}</select>
+        </div>
+        <textarea data-body rows="6" style="width:100%; font:12.5px/1.55 Consolas, monospace; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink); white-space:pre">${esc(s.body)}</textarea>
+        <div class="muted" style="font-size:12px; margin-top:4px">Markdown: <b>**bold**</b> <i>*italic*</i> <span style="font-family:monospace">\`code\`</span> - bullets, 1. numbered, [text](url) · Plain: line breaks kept · LaTeX: used verbatim.</div>
+      </div>`;
+    }).join("") + `<button class="ghost" onclick="${name}.secAdd()">+ Add section</button>`;
+  }
+
+  function collect() {
+    const cards = $(E.sectionsBox).querySelectorAll(".result");
+    S.parsed.sections = [...cards].map(card => ({
+      title: card.dataset.kind === "preamble" ? null : (card.querySelector("[data-title]").value || "").trim() || null,
+      starred: card.dataset.kind === "preamble" ? false : card.querySelector("[data-star]").checked,
+      body: card.querySelector("[data-body]").value,
+      format: card.querySelector("[data-format]").value,
+    }));
+  }
+
+  function secMove(i, d) {
+    collect();
+    const j = i + d;
+    const ss = S.parsed.sections;
+    if (j < 1 || j >= ss.length) return;  // preamble stays first
+    [ss[i], ss[j]] = [ss[j], ss[i]];
+    render();
+  }
+
+  function secDel(i) {
+    collect();
+    if (S.parsed.sections[i].title === null) return;
+    if (!confirm("Delete this section?")) return;
+    S.parsed.sections.splice(i, 1);
+    render();
+  }
+
+  function secAdd() {
+    collect();
+    S.parsed.sections.push({title: "New Section", starred: true, body: "", format: "markdown"});
+    render();
+    $(E.sectionsBox).lastChild.scrollIntoView({behavior: "smooth", block: "nearest"});
+  }
+
+  async function content() {
+    if (S.mode === "raw" || !S.parsed) return $(E.text).value;
+    collect();
+    const res = await api("/api/build", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({head: S.parsed.head, sections: S.parsed.sections, tail: S.parsed.tail})});
+    return res.content;
+  }
+
+  async function save(compile) {
+    if (!S.source) return;
+    const status = $(E.status), log = $(E.log), box = $(E.result);
+    status.textContent = compile ? "Saving & compiling…" : "Saving…";
+    log.style.display = "none"; box.innerHTML = "";
+    let text;
+    try { text = await content(); }
+    catch (e) { status.textContent = "Error: " + e.message; return; }
+    let res;
+    try { res = await persist(S.source, text, compile); }
+    catch (e) { status.textContent = "Error: " + e.message; return; }
+    afterSave(res, compile, {status, log, box, frame: $(E.frame)});
+  }
+
+  async function preview() {
+    const status = $(E.status), frame = $(E.frame);
+    frame.style.display = "none";
+    status.textContent = "Compiling preview…";
+    let text;
+    try { text = await content(); }
+    catch (e) { status.textContent = "Error: " + e.message; return; }
+    let res;
+    try {
+      res = await api("/api/preview", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({content: text})});
+    } catch (e) { status.textContent = "Error: " + e.message; return; }
+    if (!res.ok) {
+      status.textContent = "Preview failed — fix the LaTeX and retry.";
+      const log = $(E.log);
+      $(E.result).innerHTML =
+        `<div class="result err"><b>tectonic error:</b> ${esc(res.error || "unknown")}</div>`;
+      if (res.compile_log) { log.style.display = "block"; log.textContent = res.compile_log; }
       return;
     }
-    document.getElementById("editorStatus").textContent = "";
+    frame.src = res.pdf_url + "?t=" + Date.now();
+    frame.style.display = "block";
+    status.textContent = "Preview below — includes unsaved changes.";
   }
-  editorMode = m;
-  paintModeButtons();
-  if (m === "sections") renderSections();
+
+  return {open, close, setMode, secMove, secDel, secAdd, save, preview};
 }
+
+const JobEd = makeEditor("JobEd",
+  {card: "editorCard", file: "editorFile", text: "editorText", sectionsBox: "sectionsBox",
+   modeRaw: "modeRaw", modeSec: "modeSec", status: "editorStatus", log: "editorLog",
+   result: "editorResult", frame: "previewFrame"},
+  async (src) => {
+    const t = await api("/api/tex?dir=" + encodeURIComponent(src.dir));
+    return {file: src.dir + "/" + t.file, content: t.content};
+  },
+  async (src, text, compile) => api("/api/tex", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({dir: src.dir, content: text, compile})}),
+  (res, compile, ui) => {
+    if (!compile || res.compiled) {
+      ui.status.textContent = res.compiled ? "Saved + PDF rebuilt." : "Saved (no compile).";
+      if (res.pdf_url) ui.box.innerHTML = `<div class="result"><a href="${res.pdf_url}" target="_blank"><b>Open rebuilt PDF</b></a></div>`;
+      loadJobs();
+      return;
+    }
+    ui.status.textContent = "Saved, but compile failed — fix the LaTeX below and retry.";
+    ui.box.innerHTML = `<div class="result err"><b>tectonic error:</b> ${esc(res.error || "unknown")}</div>`;
+    if (res.compile_log) { ui.log.style.display = "block"; ui.log.textContent = res.compile_log; }
+  });
+
+const BaseEd = makeEditor("BaseEd",
+  {card: null, file: null, text: "baseText", sectionsBox: "baseSectionsBox",
+   modeRaw: "baseModeRaw", modeSec: "baseModeSec", status: "baseStatus", log: "baseLog",
+   result: "baseResult", frame: "basePreviewFrame"},
+  async () => ({file: "main.tex", content: (await api("/api/base")).content}),
+  async (src, text) => api("/api/base", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({content: text})}),
+  (res, compile, ui) => {
+    ui.status.textContent = "Saved main.tex (backup: main.tex.bak).";
+    if (compile) { ui.status.textContent += " Compiling preview…"; BaseEd.preview(); }
+  });
+
+async function openEditor(dir) { await JobEd.open({kind: "job", dir, label: dir + "/…"}); }
+function closeEditor() { JobEd.close(); }
 
 function fmtOptions(current) {
   return ["markdown", "plain", "latex"].map(f =>
     `<option value="${f}"${f === current ? " selected" : ""}>${f === "markdown" ? "Markdown" : f === "plain" ? "Plain text" : "LaTeX"}</option>`).join("");
 }
 
-function renderSections() {
-  const box = document.getElementById("sectionsBox");
-  box.innerHTML = editorParsed.sections.map((s, i) => {
-    const isPre = !s.title;
-    const fmt = s.format || "latex";
-    return `<div class="result" data-kind="${isPre ? "preamble" : "section"}" style="margin-bottom:10px">
-      <div class="row" style="gap:6px; margin-bottom:6px">
-        ${isPre ? `<b>Top — name &amp; contact</b><span class="muted">(before first \\section)</span>`
-                : `<input data-title type="text" value="${esc(s.title)}" placeholder="Section title" style="flex:1 1 200px">
-                   <label class="chk" title="\\section* (unnumbered) vs \\section"><input data-star type="checkbox" ${s.starred ? "checked" : ""}> *</label>
-                   ${i > 1 ? `<button class="ghost" onclick="secMove(${i},-1)" style="padding:4px 10px" title="Move up">↑</button>` : ""}
-                   <button class="ghost" onclick="secMove(${i},1)" style="padding:4px 10px" title="Move down">↓</button>
-                   <button class="ghost" onclick="secDel(${i})" style="padding:4px 10px" title="Delete section">✕</button>`}
-        <select data-format title="How this box is converted to LaTeX on save/preview" style="padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink)">${fmtOptions(fmt)}</select>
-      </div>
-      <textarea data-body rows="6" style="width:100%; font:12.5px/1.55 Consolas, monospace; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink); white-space:pre">${esc(s.body)}</textarea>
-      <div class="muted" style="font-size:12px; margin-top:4px">Markdown: <b>**bold**</b> <i>*italic*</i> <span style="font-family:monospace">\`code\`</span> - bullets, 1. numbered, [text](url) · Plain: line breaks kept · LaTeX: used verbatim.</div>
-    </div>`;
-  }).join("") + `<button class="ghost" onclick="secAdd()">+ Add section</button>`;
-}
 
-function collectSections() {
-  const cards = document.querySelectorAll("#sectionsBox .result");
-  editorParsed.sections = [...cards].map(card => ({
-    title: card.dataset.kind === "preamble" ? null : (card.querySelector("[data-title]").value || "").trim() || null,
-    starred: card.dataset.kind === "preamble" ? false : card.querySelector("[data-star]").checked,
-    body: card.querySelector("[data-body]").value,
-    format: card.querySelector("[data-format]").value,
-  }));
-}
 
-function secMove(i, d) {
-  collectSections();
-  const j = i + d;
-  const ss = editorParsed.sections;
-  if (j < 1 || j >= ss.length) return;  // preamble stays first
-  [ss[i], ss[j]] = [ss[j], ss[i]];
-  renderSections();
-}
+const SIDEBARS = ["liSidebar", "baseSidebar", "profileSidebar", "consoleSidebar"];
 
-function secDel(i) {
-  collectSections();
-  if (editorParsed.sections[i].title === null) return;
-  if (!confirm("Delete this section?")) return;
-  editorParsed.sections.splice(i, 1);
-  renderSections();
-}
-
-function secAdd() {
-  collectSections();
-  editorParsed.sections.push({title: "New Section", starred: true, body: "", format: "markdown"});
-  renderSections();
-  document.getElementById("sectionsBox").lastChild.scrollIntoView({behavior: "smooth", block: "nearest"});
-}
-
-async function currentContent() {
-  if (editorMode === "raw" || !editorParsed) return document.getElementById("editorText").value;
-  collectSections();
-  const res = await api("/api/build", {method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({head: editorParsed.head, sections: editorParsed.sections, tail: editorParsed.tail})});
-  return res.content;
-}
-
-async function saveTex(compile) {
-  if (!editorSource) return;
-  const status = document.getElementById("editorStatus");
-  const log = document.getElementById("editorLog");
-  const box = document.getElementById("editorResult");
-  status.textContent = compile ? "Saving & compiling…" : "Saving…";
-  log.style.display = "none"; box.innerHTML = "";
-  let content;
-  try { content = await currentContent(); }
-  catch (e) { status.textContent = "Error: " + e.message; return; }
-  if (editorSource.kind === "base") {
-    try {
-      await api("/api/base", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({content})});
-    } catch (e) { status.textContent = "Error: " + e.message; return; }
-    if (compile) { status.textContent = "Saved main.tex (backup: main.tex.bak). Compiling preview…"; doPreview(); return; }
-    status.textContent = "Saved main.tex (backup: main.tex.bak).";
-    return;
-  }
-  let res;
-  try {
-    res = await api("/api/tex", {method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({dir: editorSource.dir, content, compile})});
-  } catch (e) { status.textContent = "Error: " + e.message; return; }
-  if (!compile || res.compiled) {
-    status.textContent = res.compiled ? "Saved + PDF rebuilt." : "Saved (no compile).";
-    if (res.pdf_url) box.innerHTML = `<div class="result"><a href="${res.pdf_url}" target="_blank"><b>Open rebuilt PDF</b></a></div>`;
-    loadJobs();
-    return;
-  }
-  status.textContent = "Saved, but compile failed — fix the LaTeX below and retry.";
-  box.innerHTML = `<div class="result err"><b>tectonic error:</b> ${esc(res.error || "unknown")}</div>`;
-  if (res.compile_log) { log.style.display = "block"; log.textContent = res.compile_log; }
-}
-
-async function doPreview() {
-  const status = document.getElementById("editorStatus");
-  const frame = document.getElementById("previewFrame");
-  frame.style.display = "none";
-  status.textContent = "Compiling preview…";
-  let content;
-  try { content = await currentContent(); }
-  catch (e) { status.textContent = "Error: " + e.message; return; }
-  let res;
-  try {
-    res = await api("/api/preview", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({content})});
-  } catch (e) { status.textContent = "Error: " + e.message; return; }
-  if (!res.ok) {
-    status.textContent = "Preview failed — fix the LaTeX and retry.";
-    const log = document.getElementById("editorLog");
-    document.getElementById("editorResult").innerHTML =
-      `<div class="result err"><b>tectonic error:</b> ${esc(res.error || "unknown")}</div>`;
-    if (res.compile_log) { log.style.display = "block"; log.textContent = res.compile_log; }
-    return;
-  }
-  frame.src = res.pdf_url + "?t=" + Date.now();
-  frame.style.display = "block";
-  status.textContent = "Preview below — includes unsaved changes.";
+function closeSidebars(except) {
+  SIDEBARS.forEach(id => { if (id !== except) document.getElementById(id).classList.remove("open"); });
 }
 
 function toggleConsole(force) {
   const s = document.getElementById("consoleSidebar");
-  const fab = document.getElementById("consoleFab");
   const show = force === undefined ? !s.classList.contains("open") : !!force;
+  if (show) closeSidebars("consoleSidebar");
   s.classList.toggle("open", show);
-  fab.style.display = show ? "none" : "flex";
   if (show) { const i = document.getElementById("consoleIn"); if (i) i.focus(); }
 }
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape") { toggleConsole(false); toggleJobs(false); }
+  if (e.key === "Escape") closeSidebars(null);
 });
 
 function toggleJobs(force) {
   const s = document.getElementById("liSidebar");
-  const fab = document.getElementById("liFab");
   const show = force === undefined ? !s.classList.contains("open") : !!force;
+  if (show) closeSidebars("liSidebar");
   s.classList.toggle("open", show);
-  fab.style.display = show ? "none" : "flex";
   if (show) { const i = document.getElementById("jsQ"); if (i) i.focus(); }
+}
+
+let baseOpened = false;
+function toggleBase(force) {
+  const s = document.getElementById("baseSidebar");
+  const show = force === undefined ? !s.classList.contains("open") : !!force;
+  if (show) closeSidebars("baseSidebar");
+  s.classList.toggle("open", show);
+  if (show && !baseOpened) { baseOpened = true; BaseEd.open({kind: "base", label: "main.tex"}); }
+}
+
+function toggleProfile(force) {
+  const s = document.getElementById("profileSidebar");
+  const show = force === undefined ? !s.classList.contains("open") : !!force;
+  if (show) closeSidebars("profileSidebar");
+  s.classList.toggle("open", show);
 }
 
 function liSearch() {
@@ -711,7 +788,7 @@ async function runConsole() {
 async function checkVersion() {
   try {
     const {version} = await api("/api/version");
-    if (version !== 4) throw new Error("mismatch");
+    if (version !== 6) throw new Error("mismatch");
   } catch (e) {
     document.getElementById("staleBanner").style.display = "block";
   }
@@ -740,7 +817,54 @@ function toggleTheme() {
   setTheme(t || "light");
 })();
 
-loadJobs(); loadSheet(); checkVersion();
+async function loadProfile() {
+  try {
+    const p = await api("/api/profile");
+    const el = document.getElementById("profileLine");
+    if (p.source === "none" || !p.total) {
+      el.innerHTML = `LinkedIn profile: not linked — copy <span style="font-family:monospace">profile.md.example</span> to <span style="font-family:monospace">profile.md</span> and paste your Skills to boost matching.`;
+    } else {
+      el.innerHTML = `LinkedIn profile (${esc(p.source)}): <b>${p.total} skill(s)</b>${p.skills.length ? ` — ${esc(p.skills.join(", "))}${p.total > p.skills.length ? ", …" : ""}` : ""} merged into match % + Skills section.`;
+    }
+  } catch (e) { /* leave blank */ }
+}
+
+async function loadProfileFile() {
+  const box = document.getElementById("profileText");
+  const skills = document.getElementById("profileSkills");
+  try {
+    const p = await api("/api/profile-file");
+    box.value = p.content || "";
+    box.placeholder = p.exists ? "" : "No profile yet — hit “Load template”, fill your Skills, Save.";
+  } catch (e) { box.placeholder = "Could not load profile: " + e.message; }
+  try {
+    const s = await api("/api/profile");
+    skills.textContent = s.total ? `Currently linked: ${s.total} skill(s).` : "";
+  } catch (e) { /* leave blank */ }
+}
+
+async function loadTemplate() {
+  if (document.getElementById("profileText").value.trim() &&
+      !confirm("Replace current text with the template?")) return;
+  try {
+    const t = await api("/api/profile-template");
+    document.getElementById("profileText").value = t.content;
+    document.getElementById("profileStatus").textContent = "Template loaded — fill it in, then Save.";
+  } catch (e) { document.getElementById("profileStatus").textContent = "Error: " + e.message; }
+}
+
+async function saveProfile() {
+  const status = document.getElementById("profileStatus");
+  status.textContent = "Saving…";
+  try {
+    const res = await api("/api/profile-file", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({content: document.getElementById("profileText").value})});
+    status.textContent = `Saved ${res.file}.` + (res.skills.length ? ` ${res.skills.length} skill(s) detected: ${res.skills.slice(0, 8).join(", ")}${res.skills.length > 8 ? ", …" : ""}` : " No ## Skills section detected — matching uses text only.");
+    loadProfile();
+  } catch (e) { status.textContent = "Error: " + e.message; }
+}
+
+loadJobs(); loadSheet(); loadProfile(); loadProfileFile(); checkVersion();
 </script>
 </body>
 </html>

@@ -291,6 +291,33 @@ def test_auto_linkedin_path_enriches(monkeypatch):
     assert job.description == "rich" and job.job_id == "4012345678"
 
 
+def test_listing_key_linkedin_id_wins():
+    import src.job_api as J
+    a = J.listing_key("Starlink Qatar", "Data & AI Engineer",
+                      "https://qa.linkedin.com/jobs/view/data-ai-engineer-at-starlink-qatar-4469745403?utm=x",
+                      "https://www.linkedin.com/jobs/view/4469745403/")
+    b = J.listing_key("  STARLINK qatar ", "data ai engineer", "", "")
+    assert a == "li:4469745403"
+    assert b == "ct:starlinkqatar|dataaiengineer"
+    assert a != b
+
+
+def test_find_existing_listing_matches_across_ids(tmp_path, monkeypatch):
+    import json as _json
+    import src.job_api as J
+    import src.utils as UT
+    monkeypatch.setattr(UT, "OUTPUT_ROOT", tmp_path)
+    d = tmp_path / "Starlink_Qatar_4469745403"
+    d.mkdir()
+    (d / "job.json").write_text(_json.dumps({
+        "company": "Starlink Qatar", "title": "Data & AI Engineer",
+        "apply_link": "https://qa.linkedin.com/jobs/view/data-ai-engineer-at-starlink-qatar-4469745403"}))
+    found = J.find_existing_listing("Starlink Qatar", "Data & AI Engineer",
+                                    "https://x/apply", "https://www.linkedin.com/jobs/view/4469745403/")
+    assert found == d
+    assert J.find_existing_listing("Other Co", "Janitor") is None
+
+
 def test_public_login_wall_raises(monkeypatch):
     import src.job_api as J
     class R:

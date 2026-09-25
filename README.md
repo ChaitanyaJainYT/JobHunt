@@ -25,7 +25,7 @@ python agent.py check-mail
 python agent.py ui
 ```
 
-Opens `http://127.0.0.1:8765` (localhost only, no extra packages). Top to bottom: **New application** (paste URL → live progress → PDF + manual apply link), **Base resume** (`main.tex` editing — previous version auto-kept as `main.tex.bak`), **Check Gmail replies**, **Tracked applications** (direct **Open Google Sheet** link; per-row **edit icon** opens a `.tex` editor with **Save only** / **Save & compile PDF**, compile errors shown with the tectonic log), and a hidden-until-editing **resume editor** with **Raw TeX** and **Sections** modes (headers + contents as fields with add/delete/reorder; each section set to **Markdown**, **Plain text**, or **LaTeX** with auto-detection — Markdown supports `**bold**`, `*italic*`, `` `code` ``, `-`/`1.` (nested) lists, `[text](url)`, emitting only package-free LaTeX) plus **Preview PDF** (compiles current edits to a throwaway PDF inline before saving). Tracked rows can be **hidden (soft delete)** via the trash icon — folders and PDFs stay on disk and the Sheet row is untouched; restore anytime from “Show hidden”. A **Console** lives in a right slide-in sidebar (bottom-right button, `Esc` closes) for `doctor`, `check-mail [--days N] [--demo]`, `apply <url> [--resume] [--demo]` — anything else is rejected, it never runs a shell, and `setup` needs a real terminal. A **Jobs** panel mirrors it on the left (bottom-left button): keyword + country search over JSearch (your RapidAPI quota, ~1 call per search) with one-click **Prepare** per result — full tailor + PDF + tracker flow via the result's JSearch ID. LinkedIn blocks all embedding, so for LinkedIn postings use the panel's LinkedIn quick-links (new tab) and paste posting URLs back into New application. A **Dark/Light** toggle sits in the header (OS theme by default, choice remembered). Long jobs run in the background; Google consent tabs open in your browser as usual on first run.
+Opens `http://127.0.0.1:8765` (localhost only, no extra packages). Top to bottom: **New application** (paste URL → live progress → PDF + manual apply link), **Base resume** (`main.tex` editing — previous version auto-kept as `main.tex.bak`), **Check Gmail replies**, **Tracked applications** (direct **Open Google Sheet** link; per-row **edit icon** opens a `.tex` editor with **Save only** / **Save & compile PDF**, compile errors shown with the tectonic log), and a hidden-until-editing **resume editor** with **Raw TeX** and **Sections** modes (headers + contents as fields with add/delete/reorder; each section set to **Markdown**, **Plain text**, or **LaTeX** with auto-detection — Markdown supports `**bold**`, `*italic*`, `` `code` ``, `-`/`1.` (nested) lists, `[text](url)`, emitting only package-free LaTeX) plus **Preview PDF** (compiles current edits to a throwaway PDF inline before saving). Tracked rows can be **hidden (soft delete)** via the trash icon — folders and PDFs stay on disk and the Sheet row is untouched; restore anytime from “Show hidden”. A slim **left nav rail** toggles four minimized-by-default slide-in panels (opening one closes the others, `Esc` closes all): **Base resume** editor — the exact same Raw/Sections/Preview editor as tailored resumes, saving to `main.tex` with auto-`.bak` — **LinkedIn profile** editor, **Jobs** search (keyword + country over JSearch, ~1 RapidAPI call per search, one-click **Prepare** per result), and **Console** (`doctor`, `check-mail`, `apply`; never a shell; `setup` needs a real terminal). The main page itself stays lean: New application, Gmail replies, Tracked applications, resume editor. On narrow screens the rail becomes a bottom bar. LinkedIn blocks all embedding, so for LinkedIn postings use the panel's LinkedIn quick-links (new tab) and paste posting URLs back into New application. A **Dark/Light** toggle sits in the header (OS theme by default, choice remembered). Long jobs run in the background; Google consent tabs open in your browser as usual on first run.
 
 ## Commands
 
@@ -48,6 +48,8 @@ Copy `.env.example` to `.env` (auto-created) or run `setup`.
 |---|---|---|
 | `GEMINI_API_KEY` (or `GROQ_API_KEY`) | yes (one) | https://aistudio.google.com/app/apikey |
 | `GROQ_API_KEY` / `GROQ_MODEL` | no | Free at https://console.groq.com — auto-used when Gemini hits quota |
+| `LINKEDIN_PROFILE_URL` | no | Your public LinkedIn profile URL (headline/about supplement) |
+| `LINKEDIN_PROFILE_FILE` | no | Local supplement, default `profile.md` |
 | `LLM_MODEL` | no | default `gemini-3.6-flash` |
 | `RAPIDAPI_KEY` | yes | https://rapidapi.com, subscribe JSearch free tier |
 | `RAPIDAPI_HOST` | no | default `jsearch.p.rapidapi.com` |
@@ -63,6 +65,14 @@ Copy `.env.example` to `.env` (auto-created) or run `setup`.
 2. Tectonic (LaTeX, zero-config): already bundled at `tools/tectonic/` — no install or PATH setup needed; the app finds it automatically (a system-wide `tectonic` on PATH is used if present instead). Verify with `python agent.py doctor`.
 3. Your base resume as `main.tex` in project root (a `main.tex.sample` is bundled for trial).
 4. Google (one-time): Google Cloud Console -> OAuth Desktop client -> download as `credentials.json`. First Sheets/Gmail run opens browser, saves `token.json` for later. All three are gitignored.
+
+## LinkedIn skills in matching
+
+`main.tex` stays the base, but anything in your LinkedIn profile also counts. Edit it right in the UI (**LinkedIn profile** card: editor + template loader, shows detected skill count on save) or copy `profile.md.example` to `profile.md` by hand and paste your LinkedIn About + Skills once. Every run merges it: the **match %** weighs resume + profile evidence (profile-only hits are listed separately as `profile_skills` in `match.json`), and the tailor may draw Skills-section entries from either source — never invented. Optionally set `LINKEDIN_PROFILE_URL` for headline/about context (public pages hide Skills, so the file is what matters). The UI shows the linked skill count under New application; each run audits what was used in `output/<job>/profile.json`.
+
+## One listing, one folder
+
+The same posting reached via LinkedIn URL and via JSearch search shares the LinkedIn ID in its apply link — runs detect that and **update the existing folder in place** instead of spawning `Company_X` + `Company_<token>` duplicates (hidden dupes stay restorable via “Show hidden”).
 
 ## How job fetching works
 

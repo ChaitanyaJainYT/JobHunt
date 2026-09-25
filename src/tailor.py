@@ -6,9 +6,10 @@ from pathlib import Path
 from src import llm
 from src.utils import sanitize_filename
 
-TAILOR_PROMPT_V2 = """You are a resume tailor. Rewrite the LaTeX resume for the job below.
+TAILOR_PROMPT_V3 = """You are a resume tailor. Rewrite the LaTeX resume for the job below.
 Rules:
 - Inject missing keywords ONLY where truthful and contextual (skills, summary, experience bullets).
+- The Skills section may list skills evidenced in the BASE TEX **or** the CANDIDATE LINKEDIN PROFILE below. Never invent skills from neither source.
 - Rewrite the professional summary/objective to align with job title: {title} at {company}.
 - PRESERVE all LaTeX commands, environments, and structure. Do not add packages.
 - Escape special chars in NEW text only: % -> \\%, & -> \\&, $ -> \\$, _ -> \\_, # -> \\#.
@@ -19,6 +20,9 @@ COMPANY: {company}
 CORE REQUIREMENTS: {reqs}
 MISSING SKILLS: {missing}
 
+CANDIDATE LINKEDIN PROFILE:
+{profile}
+
 BASE TEX:
 {tex}
 """
@@ -28,13 +32,15 @@ def tailor_resume(base_tex: str, title: str, company: str,
                   missing: list[str], reqs: list[str],
                   api_key: str = "", model: str = "gemini-3.6-flash",
                   groq_key: str = "",
-                  groq_model: str = "openai/gpt-oss-120b") -> str:
+                  groq_model: str = "openai/gpt-oss-120b",
+                  profile_text: str = "") -> str:
     if "\\documentclass" not in base_tex:
         raise ValueError("Base .tex looks invalid (missing \\documentclass). Check main.tex.")
-    prompt = TAILOR_PROMPT_V2.format(
+    prompt = TAILOR_PROMPT_V3.format(
         title=title, company=company,
         reqs=", ".join(reqs[:8]) or "-",
         missing=", ".join(missing[:10]) or "-",
+        profile=(profile_text or "(none)")[:3000],
         tex=base_tex[:15000],
     )
     out = llm.complete_text(prompt, api_key=api_key, model=model,

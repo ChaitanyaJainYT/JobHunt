@@ -424,6 +424,41 @@ def test_tombstone_prunes_missing_dirs(tmp_path, monkeypatch):
     assert U.load_tombstones() == set()
 
 
+def test_profile_status_none_when_unconfigured(monkeypatch):
+    import src.config as C
+    def boom(**k):
+        raise C.ConfigError("missing")
+    monkeypatch.setattr(C, "load_config", boom)
+    assert U.profile_status() == {"source": "none", "skills": [], "total": 0}
+
+
+def test_profile_status_lists_skills(monkeypatch, tmp_path):
+    import src.config as C
+    import src.utils as UT
+    monkeypatch.setattr(UT, "PROJECT_ROOT", tmp_path)
+    (tmp_path / "profile.md").write_text("## Skills\nPython, SQL\n", encoding="utf-8")
+    cfg = type("Cfg", (), {"linkedin_profile_url": "", "linkedin_profile_file": "profile.md",
+                           "gemini_api_key": "x", "rapidapi_key": "x", "google_sheet_id": "x"})()
+    monkeypatch.setattr(C, "load_config", lambda **k: cfg)
+    out = U.profile_status()
+    assert out["source"] == "file" and out["total"] == 2
+
+
+def test_profile_file_roundtrip(tmp_path, monkeypatch):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "PROJECT_ROOT", tmp_path)
+    (tmp_path / "profile.md.example").write_text("## Skills\nGo\n", encoding="utf-8")
+    out = U.get_profile_file()
+    assert out == {"file": "profile.md", "exists": False, "content": ""}
+    res = U.save_profile_file("# Me\n## Skills\nPython, SQL\n")
+    assert res["ok"] and res["skills"] == ["Python", "SQL"]
+    assert U.get_profile_file()["exists"] is True
+    with pytest.raises(ValueError, match="empty"):
+        U.save_profile_file("   ")
+    tpl = U.get_profile_template()
+    assert "## Skills" in tpl["content"]
+
+
 def test_get_sheet_url_empty_when_unconfigured(monkeypatch):
     import src.config as C
     def boom(**k):

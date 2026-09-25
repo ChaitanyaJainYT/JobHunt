@@ -20,6 +20,17 @@ def test_tailor_preserves_commands(monkeypatch):
     assert "\\documentclass" in r and "\\begin{document}" in r
 
 
+def test_tailor_includes_profile(monkeypatch):
+    seen = {}
+    def fake(prompt, api_key="", model="", **k):
+        seen["prompt"] = prompt
+        return BASE
+    monkeypatch.setattr(llm, "complete_text", fake)
+    T.tailor_resume(BASE, "T", "C", [], [], api_key="x", profile_text="Kubernetes expert")
+    assert "Kubernetes expert" in seen["prompt"]
+    assert "Skills section may list skills" in seen["prompt"]
+
+
 def test_tailor_rejects_non_tex(monkeypatch):
     monkeypatch.setattr(llm, "complete_text", lambda *a, **k: "hello")
     with pytest.raises(ValueError):
