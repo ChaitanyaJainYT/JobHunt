@@ -123,7 +123,14 @@ def test_get_sheet_url(monkeypatch):
 
 
 def test_version_handshake():
-    assert U.UI_VERSION == 2
+    assert U.UI_VERSION >= 3
+
+
+def test_frontend_backend_version_sync():
+    """ui.html must check the exact UI_VERSION, or stale servers slip through."""
+    from pathlib import Path
+    html = (Path(U.__file__).resolve().parent / "ui.html").read_text(encoding="utf-8")
+    assert f"version !== {U.UI_VERSION}" in html
 
 
 def test_spawn_error_includes_trace():
@@ -196,6 +203,128 @@ def test_save_tex_creates_dated_file_when_missing(tmp_path, monkeypatch):
     res = U.save_tex("HP_1", "fresh", compile_pdf=False)
     assert res["ok"] and res["compiled"] is False
     assert re.search(r"_Resume_\d{6}\.tex$", res["file"])
+
+
+def test_search_rejects_empty_query():
+    with pytest.raises(ValueError, match="keywords"):
+        U.search_jobs_api("  ")
+
+
+def test_search_normalizes_results(monkeypatch):
+    import src.config as C
+    import src.job_api as J
+    cfg = type("Cfg", (), {"rapidapi_key": "k", "rapidapi_host": "h",
+                           "rapidapi_search_endpoint": "e", "rapidapi_country": "in"})()
+    monkeypatch.setattr(C, "load_config", lambda **k: cfg)
+    items = [{"job_id": "T" * 40, "job_title": "Dev", "employer_name": "Acme",
+              "job_description": "x" * 500, "job_location": "Blr"},
+             {"job_title": "NoId"}]
+    monkeypatch.setattr(J, "search_jobs", lambda *a, **k: items)
+    out = U.search_jobs_api("dev", "in")
+    assert len(out) == 1  # ID-less item dropped
+    assert out[0]["company"] == "Acme" and len(out[0]["snippet"]) == 300
+
+
+def test_search_linkedin_url_direct_and_fallback(monkeypatch):
+    import src.config as C
+    import src.job_api as J
+    cfg = type("Cfg", (), {"rapidapi_key": "k", "rapidapi_host": "h",
+                           "rapidapi_search_endpoint": "e", "rapidapi_country": "in"})()
+    monkeypatch.setattr(C, "load_config", lambda **k: cfg)
+    items = [
+        {"job_id": "T" * 40, "job_title": "Dev", "employer_name": "Acme",
+         "job_description": "d",
+         "apply_options": [{"publisher": "LinkedIn",
+                            "apply_link": "https://www.linkedin.com/jobs/view/123"}]},
+        {"job_id": "U" * 40, "job_title": "Data Engineer", "employer_name": "Beta Corp",
+         "job_description": "d", "job_apply_link": "https://www.shine.com/jobs/1"},
+    ]
+    monkeypatch.setattr(J, "search_jobs", lambda *a, **k: items)
+    out = U.search_jobs_api("dev", "in")
+    assert out[0]["linkedin_url"] == "https://www.linkedin.com/jobs/view/123"
+    assert out[0]["linkedin_direct"] is True
+    assert out[1]["linkedin_direct"] is False
+    assert "linkedin.com/jobs/search" in out[1]["linkedin_url"]
+    assert "Data+Engineer" in out[1]["linkedin_url"]
+
+
+def test_search_config_error_surfaced(monkeypatch):
+    import src.config as C
+    def boom(**k):
+        raise C.ConfigError("missing keys")
+    monkeypatch.setattr(C, "load_config", boom)
+    with pytest.raises(ValueError, match="missing keys"):
+        U.search_jobs_api("dev")
+
+
+def test_start_apply_accepts_job_id(monkeypatch):
+    import src.pipeline as P
+    seen = {}
+    def fake_run(url, demo=False, resume=False, **k):
+        seen["url"] = url
+        return 0
+    monkeypatch.setattr(P, "run_apply", fake_run)
+    tid = U.start_apply_task(job_id="T" * 40)
+    t = _wait_done(tid)
+    assert t["status"] == "done" and seen["url"] == "T" * 40
+
+
+def test_start_apply_rejects_garbage():
+    with pytest.raises(ValueError):
+        U.start_apply_task("hello world")
+
+
+def test_console_apply_accepts_job_id(monkeypatch):
+    monkeypatch.setattr(U, "start_apply_task", lambda *a, **k: "apply-9")
+    res = U.console_dispatch("apply " + "T" * 40)
+    assert res == {"task_id": "apply-9"}
+
+
+def test_country_list_sorted_unique_with_gulf():
+    import json
+    import re
+    from pathlib import Path
+    import ui as U
+    html = (Path(U.__file__).resolve().parent / "ui.html").read_text(encoding="utf-8")
+    m = re.search(r"const COUNTRIES = (\[.*?\]);", html, re.DOTALL)
+    assert m, "COUNTRIES array not found"
+    countries = json.loads(m.group(1))
+    names = [n for n, _ in countries]
+    codes = [c for _, c in countries]
+    assert names == sorted(names), "country names must be A-Z"
+    assert len(set(names)) == len(names) and len(set(codes)) == len(codes)
+    assert all(re.fullmatch(r"[a-z]{2}", c) for c in codes)
+    for code in ("qa", "om", "ae", "sa", "in", "us", "gb"):
+        assert code in codes, f"missing country code: {code}"
+    assert len(countries) >= 100
+
+
+def test_resolve_job_dir_by_url_suffix(monkeypatch):
+    import time
+    jobs = [{"dir": "Acme_99", "updated": time.time() - 100},
+            {"dir": "Beta_4242", "updated": time.time() - 100}]
+    monkeypatch.setattr(U, "list_jobs", lambda: jobs)
+    out = U._resolve_job_dir("https://www.linkedin.com/jobs/view/4242", time.time())
+    assert out and out["dir"] == "Beta_4242"
+
+
+def test_resolve_job_dir_token_uses_freshest(monkeypatch):
+    import time
+    now = time.time()
+    jobs = [{"dir": "Old_1", "updated": now - 3600},
+            {"dir": "NewCo_9", "updated": now}]
+    monkeypatch.setattr(U, "list_jobs", lambda: jobs)
+    out = U._resolve_job_dir("T" * 40, now - 5)
+    assert out and out["dir"] == "NewCo_9"
+    assert U._resolve_job_dir("T" * 40, now + 100) is None  # nothing newer
+
+
+def test_persist_task_log(tmp_path, monkeypatch):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "OUTPUT_ROOT", tmp_path)
+    U._persist_task_log({"id": "apply-1", "status": "error", "log": ["line1", "line2"]})
+    text = (tmp_path / "ui_tasks.log").read_text(encoding="utf-8")
+    assert "apply-1" in text and "line2" in text
 
 
 def test_get_sheet_url_empty_when_unconfigured(monkeypatch):

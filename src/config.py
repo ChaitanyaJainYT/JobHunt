@@ -135,9 +135,12 @@ def run_setup_wizard() -> AppConfig:
 
 
 def _from_values(values: dict[str, str], demo: bool) -> AppConfig:
-    # env vars take precedence over .env file
+    # env vars take precedence over .env file; blank entries fall back to
+    # defaults (setup writes every managed key, so newly added keys would
+    # otherwise shadow their defaults with empty strings)
     def get(key: str, default: str = "") -> str:
-        return os.environ.get(key, values.get(key, default)).strip()
+        v = os.environ.get(key, values.get(key, ""))
+        return (v.strip() if v else "") or default
 
     return AppConfig(
         gemini_api_key=get("GEMINI_API_KEY"),

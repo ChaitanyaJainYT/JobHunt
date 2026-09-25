@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -284,16 +285,30 @@ def _raise_if_backend_error(data: dict) -> None:
 
 
 def search_jobs(query: str, api_key: str, host: str, search_endpoint: str,
-                country: str = "in", timeout: int = 20) -> list[dict]:
-    """Text search via /search-v2. Returns raw job dicts (JSearch IDs)."""
+                country: str = "in", timeout: int = 45) -> list[dict]:
+    """Text search via /search-v2. Returns raw job dicts (JSearch IDs).
+
+    RapidAPI is flaky: one automatic retry on timeout before giving up.
+    Search always gets at least a 45s budget per attempt.
+    """
+    timeout = max(timeout or 0, 45)
     headers = {"X-RapidAPI-Key": api_key, "X-RapidAPI-Host": host}
     params = {"query": query, "country": country or "in", "num_pages": "1"}
-    try:
-        resp = requests.get(search_endpoint, headers=headers, params=params, timeout=timeout)
-    except requests.Timeout as e:
-        raise JobFetchError(f"JSearch search timed out after {timeout}s.") from e
-    except requests.RequestException as e:
-        raise JobFetchError(f"Network error reaching JSearch search ({e}).") from e
+    resp = None
+    for attempt in range(2):
+        try:
+            resp = requests.get(search_endpoint, headers=headers, params=params, timeout=timeout)
+            break
+        except requests.Timeout as e:
+            if attempt == 0:
+                time.sleep(3)
+                continue
+            raise JobFetchError(
+                f"JSearch search timed out twice after {timeout}s each. "
+                "RapidAPI is slow right now — wait a minute and retry.") from e
+        except requests.RequestException as e:
+            raise JobFetchError(f"Network error reaching JSearch search ({e}).") from e
+    assert resp is not None
     if resp.status_code in (401, 403):
         raise JobFetchError("RapidAPI 401/403: invalid key or not subscribed. Run 'python agent.py setup'.")
     if resp.status_code == 429:

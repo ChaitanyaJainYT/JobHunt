@@ -40,6 +40,15 @@ def test_missing_key_raises_friendly(tmp_path, monkeypatch):
         assert "--demo" in msg or "setup" in msg
 
 
+def test_blank_values_fall_back_to_defaults():
+    cfg = C._from_values({"LLM_MODEL": "", "RAPIDAPI_SEARCH_ENDPOINT": "",
+                          "RAPIDAPI_COUNTRY": "", "GEMINI_API_KEY": ""}, demo=False)
+    assert cfg.llm_model == "gemini-3.6-flash"
+    assert cfg.rapidapi_search_endpoint == "https://jsearch.p.rapidapi.com/search-v2"
+    assert cfg.rapidapi_country == "in"
+    assert cfg.gemini_api_key == ""  # required keys must stay detectable-as-missing
+
+
 def test_demo_mode_skips_keys(tmp_path, monkeypatch):
     env = tmp_path / ".env"
     _write_env(env, "")

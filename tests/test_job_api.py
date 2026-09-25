@@ -184,6 +184,31 @@ def test_search_unwraps_jobs_dict(monkeypatch):
     assert len(out) == 1 and out[0]["job_id"] == "TOK1"
 
 
+def test_search_retries_once_on_timeout(monkeypatch):
+    import src.job_api as J
+    calls = {"n": 0}
+    jobs = [{"job_id": "T1", "job_title": "Dev"}]
+    def fake_get(url, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise requests.Timeout()
+        return _resp(200, _search_payload(jobs))
+    monkeypatch.setattr(requests, "get", fake_get)
+    monkeypatch.setattr(J.time, "sleep", lambda *_: None)
+    out = J.search_jobs("dev", "k", "h", "https://e/search-v2")
+    assert len(out) == 1 and calls["n"] == 2
+
+
+def test_search_double_timeout_friendly(monkeypatch):
+    import src.job_api as J
+    def boom(*a, **k):
+        raise requests.Timeout()
+    monkeypatch.setattr(requests, "get", boom)
+    monkeypatch.setattr(J.time, "sleep", lambda *_: None)
+    with pytest.raises(JobFetchError, match="timed out twice"):
+        J.search_jobs("dev", "k", "h", "https://e/search-v2")
+
+
 def test_search_backend_error_surfaced(monkeypatch):
     import src.job_api as J
     payload = {"status": "ERROR", "error": {"message": "Invalid date posted value.", "code": 400}}

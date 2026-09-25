@@ -27,9 +27,10 @@ from socketserver import ThreadingMixIn
 ROOT = Path(__file__).resolve().parent
 UI_HTML = ROOT / "ui.html"
 
-# Bump when the frontend and backend must match. The page checks this on
-# load and shows a restart banner instead of cryptic 404s from a stale server.
-UI_VERSION = 2
+# Bump on EVERY ui.py/ui.html change. The page checks this on load and
+# shows a restart banner instead of cryptic 404s from a stale server.
+# (test_ui.py::test_frontend_backend_version_sync enforces the match.)
+UI_VERSION = 3
 
 _tasks: dict[str, dict] = {}
 _tasks_lock = threading.Lock()
@@ -157,6 +158,83 @@ def save_tex(job_dir_name: str, content: str, compile_pdf: bool = True) -> dict:
                 "error": str(e)[:500], "compile_log": log}
 
 
+JOB_ID_RE = None  # compiled lazily (see _job_id_re)
+
+
+def _job_id_re():
+    global JOB_ID_RE
+    if JOB_ID_RE is None:
+        import re
+        JOB_ID_RE = re.compile(r"^[A-Za-z0-9_+/=-]{32,}$")
+    return JOB_ID_RE
+
+
+def looks_like_job_id(s: str) -> bool:
+    return bool(_job_id_re().match((s or "").strip()))
+
+
+def search_jobs_api(query: str, country: str = "") -> list[dict]:
+    """Keyword search via JSearch; light normalized results for the UI."""
+    import re
+    from src.config import ConfigError, load_config
+    from src import job_api
+    query = (query or "").strip()
+    if not query:
+        raise ValueError("Type keywords to search (e.g. data engineer).")
+    try:
+        cfg = load_config(auto_wizard=False, demo=False)
+    except ConfigError as e:
+        raise ValueError(str(e))
+    try:
+        items = job_api.search_jobs(query, cfg.rapidapi_key, cfg.rapidapi_host,
+                                    cfg.rapidapi_search_endpoint,
+                                    (country or cfg.rapidapi_country or "in"))
+    except Exception as e:  # noqa: BLE001 - surfaced to UI
+        raise ValueError(f"Job search failed: {e}")
+    out = []
+    for it in items[:10]:
+        jid = job_api._pick(it, "job_id", "id")
+        if not jid:
+            continue
+        title = job_api._pick(it, "job_title", "title", default="Untitled")
+        company = job_api._pick(it, "employer_name", "company_name", "company", default="?")
+        desc = re.sub(r"\s+", " ", job_api._pick(it, "job_description", "description")).strip()
+        link, direct = _linkedin_url(it, title, company)
+        out.append({
+            "job_id": jid,
+            "title": title,
+            "company": company,
+            "location": job_api._pick(it, "job_location", "job_city", default=""),
+            "posted": job_api._pick(it, "job_posted_at", default=""),
+            "snippet": desc[:300],
+            "salary": job_api._pick(it, "job_salary_string", "job_salary", default=""),
+            "linkedin_url": link,
+            "linkedin_direct": direct,
+        })
+    return out
+
+
+def _linkedin_url(item: dict, title: str, company: str) -> tuple[str, bool]:
+    """(url, is_direct_posting). Prefers a real linkedin.com/jobs/view link
+    from the result's apply options; otherwise a LinkedIn keyword search."""
+    links: list[str] = []
+    for key in ("job_apply_link", "job_google_link"):
+        v = item.get(key)
+        if isinstance(v, str) and v.strip():
+            links.append(v.strip())
+    for opt in item.get("apply_options", []) or []:
+        if isinstance(opt, dict):
+            for key in ("apply_link", "link", "url"):
+                v = opt.get(key)
+                if isinstance(v, str) and v.strip():
+                    links.append(v.strip())
+    for link in links:
+        if "linkedin.com/jobs/view" in link:
+            return link, True
+    q = urllib.parse.quote_plus(f"{title} {company}".strip() or title)
+    return f"https://www.linkedin.com/jobs/search/?keywords={q}", False
+
+
 def get_sheet_url() -> str:
     """Public spreadsheet URL from config. Empty when not configured.
 
@@ -204,17 +282,44 @@ class _LogWriter(io.TextIOBase):
         return len(s)
 
 
-def _finish_apply(task: dict, url: str, resume: bool, demo: bool = False) -> None:
-    from src.pipeline import run_apply
+def _resolve_job_dir(url_or_id: str, started: float) -> dict | None:
+    """Find the result card data for a finished apply run.
+
+    URL inputs match by job-ID suffix; JSearch-ID inputs (not URLs) match
+    the freshest folder written after the run started.
+    """
     from src.job_api import parse_job_id
+    try:
+        if url_or_id.startswith("http"):
+            jid = parse_job_id(url_or_id)
+            return next((j for j in list_jobs() if j["dir"].endswith(f"_{jid}")), None)
+    except Exception:
+        pass
+    fresh = [j for j in list_jobs() if j.get("updated", 0) >= started - 5]
+    return fresh[0] if fresh else None
+
+
+def _persist_task_log(task: dict) -> None:
+    """Append finished task logs so failures stay debuggable after reload."""
+    try:
+        from src.utils import OUTPUT_ROOT
+        from datetime import datetime
+        OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+        with open(OUTPUT_ROOT / "ui_tasks.log", "a", encoding="utf-8") as f:
+            f.write(f"\n=== {datetime.now().isoformat()} {task['id']} "
+                    f"{task['status']} ===\n")
+            f.write("\n".join(task["log"][-100:]) + "\n")
+    except Exception:
+        pass
+
+
+def _finish_apply(task: dict, url: str, resume: bool, demo: bool = False) -> None:
+    import time
+    from src.pipeline import run_apply
+    started = time.time()
     code = run_apply(url, demo=demo, resume=resume)
     # Re-read artifacts for the result card (pipeline prints but returns only a code).
-    try:
-        jid = parse_job_id(url)
-        match_dir = next((j for j in list_jobs() if j["dir"].endswith(f"_{jid}")), None)
-    except Exception:
-        match_dir = None
-    task["result"] = {"exit_code": code, "job": match_dir}
+    task["result"] = {"exit_code": code, "job": _resolve_job_dir(url, started)}
 
 
 def _finish_check_mail(task: dict, days: int, demo: bool = False) -> None:
@@ -238,15 +343,25 @@ def _spawn(kind: str, fn) -> str:
                     task["result"] = {"error": f"{type(e).__name__}: {e}",
                                       "trace": traceback.format_exc().strip().splitlines()[-8:]}
                     task["status"] = "error"
+            finally:
+                with _tasks_lock:
+                    _persist_task_log(task)
     threading.Thread(target=_run, daemon=True).start()
     return tid
 
 
-def start_apply_task(url: str, resume: bool = False, demo: bool = False) -> str:
-    url = (url or "").strip()
-    if not url.startswith(("http://", "https://")):
+def start_apply_task(url: str = "", resume: bool = False, demo: bool = False,
+                     job_id: str = "") -> str:
+    url, job_id = (url or "").strip(), (job_id or "").strip()
+    if job_id:
+        if not looks_like_job_id(job_id):
+            raise ValueError("That doesn't look like a JSearch job ID.")
+        target = job_id
+    elif url.startswith(("http://", "https://")):
+        target = url
+    else:
         raise ValueError("Please paste a full job URL starting with http(s)://")
-    return _spawn("apply", lambda task: _finish_apply(task, url, resume, demo))
+    return _spawn("apply", lambda task: _finish_apply(task, target, resume, demo))
 
 
 def start_check_mail_task(days: int = 14, demo: bool = False) -> str:
@@ -319,9 +434,16 @@ def console_dispatch(command: str) -> dict:
             return {"error": "Usage: apply <job-url> [--resume] [--demo]"}
         if ns.command != "apply" or not getattr(ns, "url", None):
             return {"error": "Usage: apply <job-url> [--resume] [--demo]"}
+        u = ns.url.strip()
+        kw = {"resume": bool(getattr(ns, "resume", False)),
+              "demo": bool(getattr(ns, "demo", False))}
         try:
-            tid = start_apply_task(ns.url, resume=bool(getattr(ns, "resume", False)),
-                                   demo=bool(getattr(ns, "demo", False)))
+            if u.startswith(("http://", "https://")):
+                tid = start_apply_task(u, **kw)
+            elif looks_like_job_id(u):
+                tid = start_apply_task(job_id=u, demo=kw["demo"])
+            else:
+                return {"error": "Usage: apply <job-url> [--resume] [--demo]"}
         except ValueError as e:
             return {"error": str(e)}
         return {"task_id": tid}
@@ -415,11 +537,20 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/apply":
                 body = self._read_json()
                 try:
-                    tid = start_apply_task(body.get("url", ""), bool(body.get("resume")))
+                    tid = start_apply_task(body.get("url", ""), bool(body.get("resume")),
+                                           job_id=body.get("job_id", ""))
                 except ValueError as e:
                     self._json({"error": str(e)}, 400)
                     return
                 self._json({"task_id": tid})
+            elif parsed.path == "/api/search":
+                body = self._read_json()
+                try:
+                    jobs = search_jobs_api(body.get("query", ""), body.get("country", ""))
+                except ValueError as e:
+                    self._json({"error": str(e)}, 400)
+                    return
+                self._json({"jobs": jobs})
             elif parsed.path == "/api/check-mail":
                 body = self._read_json()
                 try:
