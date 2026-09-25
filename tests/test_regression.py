@@ -167,6 +167,50 @@ def test_scope_403_self_heals_with_refresh(monkeypatch, tmp_path):
     assert FakeCreds.refreshed == 1 and calls["n"] == 2
 
 
+def test_call_gemini_uses_new_sdk(monkeypatch):
+    from google.genai import types as real_types
+    from src import llm
+    seen = {}
+
+    class FakeModels:
+        def generate_content(self, model=None, contents=None, config=None):
+            seen["model"] = model
+            seen["contents"] = contents
+            seen["timeout_ms"] = config.http_options.timeout
+            return type("R", (), {"text": "hi"})()
+
+    class FakeClient:
+        def __init__(self, api_key=None):
+            seen["key"] = api_key
+            self.models = FakeModels()
+
+    class FakeHttpOptions:
+        def __init__(self, timeout=None):
+            self.timeout = timeout
+
+    class FakeGenConfig:
+        def __init__(self, http_options=None):
+            self.http_options = http_options
+
+    monkeypatch.setattr("google.genai.Client", FakeClient)
+    monkeypatch.setattr(real_types, "HttpOptions", FakeHttpOptions)
+    monkeypatch.setattr(real_types, "GenerateContentConfig", FakeGenConfig)
+    out = llm._call_gemini("prompt", api_key="k", model="m", timeout=60)
+    assert out == "hi"
+    assert seen["key"] == "k" and seen["model"] == "m"
+    assert seen["timeout_ms"] == 60000
+
+
+def test_friendly_error_uses_api_code():
+    from src import llm
+    err = type("E", (Exception,), {})("boom")
+    err.code = 429
+    assert "quota" in str(llm._friendly_transport_error(err)).lower()
+    err2 = Exception("API key not valid. [API_KEY_INVALID]")
+    assert "setup" in str(llm._friendly_transport_error(err2))
+    assert "LLM call failed" in str(llm._friendly_transport_error(None))
+
+
 def test_groq_fallback_on_gemini_quota(monkeypatch):
     calls = []
     def fake_gemini(prompt, api_key, model, timeout):

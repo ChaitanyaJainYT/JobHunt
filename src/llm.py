@@ -1,4 +1,4 @@
-"""LLM wrapper: Gemini primary, Groq optional fallback. JSON-safe.
+"""LLM wrapper: Gemini (google-genai SDK) primary, Groq optional fallback.
 
 complete_json(prompt) -> dict. Strips ```json fences, retries once.
 Raises LLMError with friendly fix (bad key / quota / --demo).
@@ -14,6 +14,17 @@ class LLMError(Exception):
     pass
 
 
+def _quiet_sdk_logging() -> None:
+    try:
+        import logging
+        logging.getLogger("google_genai.models").setLevel(logging.ERROR)
+    except Exception:
+        pass
+
+
+_quiet_sdk_logging()
+
+
 def _is_transient(msg: str) -> bool:
     """Transient transport errors worth one automatic retry (e.g. Gemini 504)."""
     m = msg.lower()
@@ -23,10 +34,16 @@ def _is_transient(msg: str) -> bool:
     ))
 
 
-def _friendly_transport_error(msg: str) -> LLMError:
-    if "API_KEY_INVALID" in msg or "401" in msg or "400" in msg and "key" in msg.lower():
+def _friendly_transport_error(err: Exception | None) -> LLMError:
+    """Map SDK/HTTP failures (google-genai APIError has .code) to user fixes."""
+    code = getattr(err, "code", None)
+    msg = str(err) if err is not None else ""
+    low = msg.lower()
+    if (code in (400, 401, 403) and ("key" in low or "API_KEY_INVALID" in msg)
+            or "API_KEY_INVALID" in msg or "API key not valid" in msg
+            or "401" in msg or "400" in msg and "key" in low):
         return LLMError(f"Gemini API key rejected. Fix: python agent.py setup. Detail: {msg[:200]}")
-    if "429" in msg or "quota" in msg.lower():
+    if code == 429 or "429" in msg or "quota" in low:
         return LLMError(f"LLM quota exceeded ({msg[:150]}). Wait/upgrade or use --demo.")
     return LLMError(f"LLM call failed: {msg[:300]}")
 
@@ -73,7 +90,7 @@ def complete_json(prompt: str, api_key: str = "", model: str = "gemini-3.6-flash
                 last = e
                 time.sleep(3)
                 continue
-            raise _friendly_transport_error(msg)
+            raise _friendly_transport_error(e)
     raise LLMError(f"LLM returned invalid JSON twice ({last}). Try again or simplify resume/JD.")
 
 
@@ -94,15 +111,20 @@ def complete_text(prompt: str, api_key: str = "", model: str = "gemini-3.6-flash
                 last = e
                 time.sleep(3)
                 continue
-            raise _friendly_transport_error(msg)
-    raise _friendly_transport_error(str(last))
+            raise _friendly_transport_error(e)
+    raise _friendly_transport_error(last)
 
 
 def _call_gemini(prompt: str, api_key: str, model: str, timeout: int) -> str:
-    import google.generativeai as genai
-    genai.configure(api_key=api_key)
-    m = genai.GenerativeModel(model)
-    resp = m.generate_content(prompt, request_options={"timeout": timeout})
+    from google import genai
+    from google.genai import types
+    client = genai.Client(api_key=api_key)
+    resp = client.models.generate_content(
+        model=model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            http_options=types.HttpOptions(timeout=max(1, timeout) * 1000)),
+    )
     return getattr(resp, "text", "") or ""
 
 
@@ -157,10 +179,10 @@ def fix_latex(broken_tex: str, error_log: str, api_key: str = "",
                 last = e
                 time.sleep(3)
                 continue
-            raise _friendly_transport_error(str(e))
+            raise _friendly_transport_error(e)
         # fix may come fenced; strip
         t = _strip_fences(raw)
         if "\\documentclass" not in t:
             raise LLMError("LaTeX fix did not return a .tex document.")
         return t
-    raise _friendly_transport_error(str(last))
+    raise _friendly_transport_error(last)
