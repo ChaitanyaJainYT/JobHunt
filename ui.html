@@ -29,6 +29,11 @@
   button.ghost { background:var(--ghost); color:var(--ink); }
   label.chk { display:flex; gap:6px; align-items:center; font-size:13px; color:var(--muted); }
   pre.log { background:var(--logbg); color:var(--logink); border:1px solid var(--line); border-radius:8px; padding:12px; max-height:260px; overflow:auto; font-size:12.5px; white-space:pre-wrap; }
+  /* log background stays dark in both themes, so level colors are fixed */
+  .log .lg-err { color:#ff8a80; font-weight:600; }
+  .log .lg-warn { color:#ffca7a; }
+  .log .lg-ok { color:#7bdc9e; }
+  .log .lg-match { color:#8ab4f8; font-weight:600; }
   .result { border:1px solid var(--line); border-left:5px solid var(--ok); border-radius:8px; padding:12px 14px; margin-top:12px; }
   .result.err { border-left-color:var(--bad); }
   .result a { color:var(--acc); }
@@ -244,6 +249,20 @@ async function api(path, opts) {
 }
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
+function logCls(line) {
+  if (/error|traceback|failed|exception/i.test(line)) return "lg-err";
+  if (/warn(ing)?|\[WARN\]/i.test(line)) return "lg-warn";
+  if (/^\s*match \d+%/i.test(line)) return "lg-match";
+  if (/done in|\[OK\]|finished\.|logged to sheet|saved \+ pdf rebuilt|saved main\.tex/i.test(line)) return "lg-ok";
+  return "";
+}
+
+function appendLog(el, lines) {
+  if (!lines.length) return;
+  el.innerHTML += lines.map(l => logCls(l) ? `<span class="${logCls(l)}">${esc(l)}</span>` : esc(l)).join("\n") + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+
 const ICON_PDF = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 1.5h4.5L12 5v9.5H4z"/><path d="M8.5 1.5V5H12"/><path d="M6 8.5h4M6 11h4"/></svg>`;
 const ICON_APPLY = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5H3.5v9h9V9.5"/><path d="M9.5 3.5h3v3"/><path d="M12.5 3.5 8 8"/></svg>`;
 const ICON_SHEET = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M6 2.5v11M2.5 6h11M2.5 10h11"/></svg>`;
@@ -261,14 +280,15 @@ async function loadJobs() {
     const active = jobs.filter(j => !j.deleted);
     const deleted = jobs.filter(j => j.deleted);
     if (!active.length && !deleted.length) { box.innerHTML = '<span class="muted">No applications yet — paste a URL above.</span>'; return; }
-    box.innerHTML = (active.length ? `<table><tr><th>Company</th><th>Role</th><th>Match</th><th>Links</th></tr>` +
+    box.innerHTML = (active.length ? `<table><tr><th>Company</th><th>Role</th><th>Match</th><th>Status</th><th>Links</th></tr>` +
       active.map(j => `<tr><td><b>${esc(j.company)}</b><div class="skills">${esc((j.matching_skills||[]).join(", "))}</div></td>
         <td>${esc(j.title)}${(j.missing_skills||[]).length ? `<div class="skills">missing: ${esc(j.missing_skills.join(", "))}</div>` : ""}</td>
         <td>${j.match_score == null ? "—" : `<span class="score">${j.match_score}%</span>`}</td>
+        <td title="As last logged locally; the Sheet may be newer after Gmail updates">${j.status ? esc(j.status) : "—"}</td>
         <td style="white-space:nowrap"><button class="icon-link" style="background:none;border:0;cursor:pointer" onclick="openEditor('${esc(j.dir)}')" title="Edit resume .tex" aria-label="Edit resume">${ICON_EDIT}</button>${j.pdf_url ? `<a class="icon-link" href="${j.pdf_url}" target="_blank" title="Open tailored PDF" aria-label="Open tailored PDF">${ICON_PDF}</a>` : '<span class="muted" title="No PDF produced">—</span>'}${j.apply_link ? `<a class="icon-link" href="${esc(j.apply_link)}" target="_blank" title="Apply manually (opens job posting)" aria-label="Apply manually">${ICON_APPLY}</a>` : ""}<button class="icon-link" style="background:none;border:0;cursor:pointer" onclick="deleteJob('${esc(j.dir)}','${esc(j.company)}')" title="Hide (soft delete — restorable)" aria-label="Hide application">${ICON_TRASH}</button></td></tr>`).join("") + `</table>` : '<span class="muted">No active applications.</span>')
       + (deleted.length ? `<div style="margin-top:10px"><a href="#" onclick="showDeleted=!showDeleted;loadJobs();return false;" class="muted">${showDeleted ? "Hide" : "Show"} hidden (${deleted.length})</a>
-        ${showDeleted ? `<table style="margin-top:6px; opacity:.75"><tr><th>Company</th><th>Role</th><th></th></tr>` +
-          deleted.map(j => `<tr><td>${esc(j.company)}</td><td>${esc(j.title)}</td>
+        ${showDeleted ? `<table style="margin-top:6px; opacity:.75"><tr><th>Company</th><th>Role</th><th>Status</th><th></th></tr>` +
+          deleted.map(j => `<tr><td>${esc(j.company)}</td><td>${esc(j.title)}</td><td>${j.status ? esc(j.status) : "—"}</td>
             <td><button class="icon-link" style="background:none;border:0;cursor:pointer" onclick="restoreJob('${esc(j.dir)}')" title="Restore" aria-label="Restore application">${ICON_RESTORE}</button></td></tr>`).join("") + `</table>` : ""}</div>` : "");
   } catch (e) { box.innerHTML = `<span class="muted">Could not load jobs: ${esc(e.message)}</span>`; }
 }
@@ -297,7 +317,7 @@ async function pollTask(tid, logEl, statusEl, onDone) {
     try { t = await api("/api/tasks/" + tid); }
     catch (e) { statusEl.textContent = "Connection lost: " + e.message; return; }
     const fresh = t.log.slice(seen); seen = t.log.length;
-    if (fresh.length) { logEl.textContent += fresh.join("\n") + "\n"; logEl.scrollTop = logEl.scrollHeight; }
+    appendLog(logEl, fresh);
     if (t.status === "running") { statusEl.textContent = "Working… (" + t.log.length + " lines)"; continue; }
     statusEl.textContent = t.status === "done" ? "Finished." : "Failed.";
     onDone(t);
@@ -777,7 +797,7 @@ async function runConsole() {
       catch (e) { clog("Connection lost: " + e.message); return; }
       const fresh = t.log.slice(shown);
       shown = t.log.length;
-      if (fresh.length) { log.textContent += fresh.join("\n") + "\n"; log.scrollTop = log.scrollHeight; }
+      appendLog(log, fresh);
       if (t.status !== "running") {
         if (t.status !== "done") clog(failDetail(t));
         else if ((t.result || {}).exit_code) clog("(exit " + t.result.exit_code + ")");
@@ -791,7 +811,7 @@ async function runConsole() {
 async function checkVersion() {
   try {
     const {version} = await api("/api/version");
-    if (version !== 7) throw new Error("mismatch");
+    if (version !== 8) throw new Error("mismatch");
   } catch (e) {
     document.getElementById("staleBanner").style.display = "block";
   }

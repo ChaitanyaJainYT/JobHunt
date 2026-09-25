@@ -238,6 +238,13 @@ def run_apply(url: str, demo: bool = False, out: str | None = None,
             row_no = sheets.log_application(job, match, pdf_display, job.apply_link,
                                             cfg.google_sheet_id, cfg.google_credentials_file,
                                             client=client)
+            try:  # mirror status locally so the UI table shows it without API calls
+                jd = json.loads((folder / "job.json").read_text(encoding="utf-8"))
+                jd["status"] = sheets.DEFAULT_STATUS
+                jd["sheet_row"] = row_no
+                (folder / "job.json").write_text(json.dumps(jd, indent=2), encoding="utf-8")
+            except Exception:
+                pass
     except Exception as e:
         print(f"[WARN] Sheets log failed (PDF still ready): {e}")
         row_no = "failed"

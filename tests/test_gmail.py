@@ -81,6 +81,29 @@ def test_no_companies_no_crash(tmp_path):
     assert G.run_check_mail([], "demo", seen_path=tmp_path / "s.json") == []
 
 
+def test_sync_local_job_status(tmp_path, monkeypatch):
+    import json as _json
+    import src.utils as UT
+    monkeypatch.setattr(UT, "OUTPUT_ROOT", tmp_path)
+    d1 = tmp_path / "Acme_old"
+    d1.mkdir()
+    (d1 / "job.json").write_text(_json.dumps({"company": "Acme Corp", "title": "T"}))
+    import time
+    d2 = tmp_path / "Acme_new"
+    d2.mkdir()
+    (d2 / "job.json").write_text(_json.dumps({"company": "ACME corp", "title": "T2"}))
+    assert G.sync_local_job_status("acme CORP", "Interview Invite") is True
+    assert _json.loads((d2 / "job.json").read_text())["status"] == "Interview Invite"
+    assert "status" not in _json.loads((d1 / "job.json").read_text())  # latest only
+    assert G.sync_local_job_status("Nobody", "Offer") is False
+
+
+def test_sync_never_raises(tmp_path, monkeypatch):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "OUTPUT_ROOT", tmp_path / "missing")
+    assert G.sync_local_job_status("Acme", "Offer") is False
+
+
 def test_low_confidence_skipped(monkeypatch, tmp_path):
     monkeypatch.setattr(llm, "complete_json", lambda *a, **k: {"label": "Offer", "confidence": 0.4})
     ws_client = FakeClient()

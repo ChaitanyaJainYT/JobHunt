@@ -30,7 +30,7 @@ UI_HTML = ROOT / "ui.html"
 # Bump on EVERY ui.py/ui.html change. The page checks this on load and
 # shows a restart banner instead of cryptic 404s from a stale server.
 # (test_ui.py::test_frontend_backend_version_sync enforces the match.)
-UI_VERSION = 7
+UI_VERSION = 8
 
 _tasks: dict[str, dict] = {}
 _tasks_lock = threading.Lock()
@@ -128,6 +128,7 @@ def list_jobs(include_deleted: bool = False) -> list[dict]:
             "deleted": deleted,
             "company": job.get("company", "?"),
             "title": job.get("title", "?"),
+            "status": job.get("status", "") or "",
             "match_score": match.get("match_score"),
             "matching_skills": (match.get("matching_skills") or [])[:6],
             "missing_skills": (match.get("missing_skills") or [])[:6],

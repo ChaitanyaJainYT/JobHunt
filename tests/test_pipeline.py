@@ -230,6 +230,36 @@ def test_honesty_gate_warns_when_unfixable(tmp_path, monkeypatch, capsys):
     assert "HONESTY WARNING" in capsys.readouterr().out
 
 
+def test_apply_persists_status_locally(tmp_path, monkeypatch):
+    import json as _json
+    import src.pipeline as _P
+    import src.utils as U
+    from src.job_api import Job as _Job
+    from src.matcher import MatchResult
+    from src.sheets import FakeClient
+    monkeypatch.setattr(U, "OUTPUT_ROOT", tmp_path)
+    rc = _P.run_apply("https://www.linkedin.com/jobs/view/4242", demo=False,
+                      out=str(tmp_path / "j9"), sheet_client=FakeClient(),
+                      cfg=type("C", (), {"rapidapi_key": "k", "rapidapi_host": "h",
+                                         "rapidapi_job_endpoint": "e", "gemini_api_key": "g",
+                                         "groq_api_key": "", "groq_model": "gm", "llm_model": "m",
+                                         "rapidapi_search_endpoint": "https://e/search",
+                                         "rapidapi_country": "in", "google_sheet_id": "demo",
+                                         "google_credentials_file": "c", "applicant_name": "N",
+                                         "linkedin_profile_url": "",
+                                         "linkedin_profile_file": "profile.md"})(),
+                      _overrides={
+                          "fetch_job": lambda *a, **k: _Job(
+                              "T", "Acme", "Python role", "https://apply/9", "4242", "u"),
+                          "analyze_match": lambda *a, **k: MatchResult(70, [], [], []),
+                          "tailor_resume": lambda *a, **k: "\\documentclass{article}\n\\begin{document}\nHi\n\\end{document}\n",
+                          "compile_with_heal": lambda *a, **k: tmp_path / "j9" / "x.pdf",
+                      })
+    assert rc == 0
+    saved = _json.loads((tmp_path / "j9" / "job.json").read_text())
+    assert saved["status"] == "Ready to Apply" and saved["sheet_row"] == 2
+
+
 def test_cli_routing():
     ns = normalize_args(["apply", "--url", "https://www.linkedin.com/jobs/view/99"])
     assert ns.command == "apply" and ns.url.endswith("/99")

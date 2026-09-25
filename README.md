@@ -84,7 +84,7 @@ LinkedIn numeric IDs are not JSearch IDs, so for a LinkedIn URL the flow is: pub
 
 ## Outputs
 
-Per job: `output/<Company>_<JobId>/job.json`, `match.json`, `<COMPANY>_<Name>_Resume_<DDMMYY>.tex/.pdf`, `run.log`. Example: `HP_Chaitanya_Jain_Resume_230926.pdf` (name from `APPLICANT_NAME` in `.env`, date = run day). `main.tex` is never modified. Sheet columns: Date Applied, Company, Job Title, Match Score %, Local PDF Path, Application URL, Status (`Ready to Apply`), Last Email Date.
+Per job: `output/<Company>_<JobId>/job.json` (now also carries `status` + `sheet_row`, mirrored from Sheets on apply and synced by Gmail checks), `match.json`, `<COMPANY>_<Name>_Resume_<DDMMYY>.tex/.pdf`, `run.log`. Example: `HP_Chaitanya_Jain_Resume_230926.pdf` (name from `APPLICANT_NAME` in `.env`, date = run day). `main.tex` is never modified. Sheet columns: Date Applied, Company, Job Title, Match Score %, Local PDF Path, Application URL, Status (`Ready to Apply`), Last Email Date.
 
 ## Troubleshooting
 

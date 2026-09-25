@@ -40,6 +40,17 @@ def test_list_jobs_reads_artifacts(tmp_path, monkeypatch):
     assert len(jobs) == 1
     assert jobs[0]["match_score"] == 80
     assert jobs[0]["pdf_url"].endswith(".pdf")
+    assert jobs[0]["status"] == ""  # absent locally -> blank cell
+
+
+def test_list_jobs_surfaces_status(tmp_path, monkeypatch):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "OUTPUT_ROOT", tmp_path)
+    d = tmp_path / "Acme_1"
+    d.mkdir()
+    (d / "job.json").write_text(json.dumps({
+        "company": "Acme", "title": "T", "status": "Interview Invite"}))
+    assert U.list_jobs()[0]["status"] == "Interview Invite"
 
 
 def test_list_jobs_empty_without_output(tmp_path, monkeypatch):

@@ -164,6 +164,42 @@ def _validated_gmail_build(creds, tok_path: Path, cred_path: Path):
         return svc
 
 
+def sync_local_job_status(company: str, status: str) -> bool:
+    """Mirror a sheet status change into the matching local job.json.
+
+    Latest folder whose company matches (case-insensitive). Never raises;
+    returns False when nothing matched. Real-mode only (callers skip fakes).
+    """
+    try:
+        import json
+        from src.utils import OUTPUT_ROOT
+        if not OUTPUT_ROOT.exists():
+            return False
+        target = (company or "").strip().lower()
+        best: Path | None = None
+        best_mtime = -1.0
+        for d in OUTPUT_ROOT.iterdir():
+            if not d.is_dir():
+                continue
+            jf = d / "job.json"
+            if not jf.exists():
+                continue
+            try:
+                comp = str(json.loads(jf.read_text(encoding="utf-8")).get("company", ""))
+            except Exception:
+                continue
+            if comp.strip().lower() == target and d.stat().st_mtime > best_mtime:
+                best, best_mtime = d, d.stat().st_mtime
+        if best is None:
+            return False
+        data = json.loads((best / "job.json").read_text(encoding="utf-8"))
+        data["status"] = status
+        (best / "job.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
+        return True
+    except Exception:
+        return False
+
+
 def run_check_mail(companies: list[str], sheet_id: str, creds_file: str = "credentials.json",
                    days: int = 14, api_key: str = "", model: str = "gemini-3.6-flash",
                    groq_key: str = "", groq_model: str = "openai/gpt-oss-120b",
@@ -201,6 +237,8 @@ def run_check_mail(companies: list[str], sheet_id: str, creds_file: str = "crede
                 try:
                     updated = sheets.update_status(company, label, em.date,
                                                    sheet_id, creds_file, client=sheet_client)
+                    if updated and sheet_client is None:
+                        sync_local_job_status(company, label)
                 except Exception as e:
                     print(f"[WARN] Sheet update skipped ({company}): {e}")
                     updated = False
