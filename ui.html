@@ -209,19 +209,44 @@ const ICON_PDF = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" str
 const ICON_APPLY = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5H3.5v9h9V9.5"/><path d="M9.5 3.5h3v3"/><path d="M12.5 3.5 8 8"/></svg>`;
 const ICON_SHEET = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M6 2.5v11M2.5 6h11M2.5 10h11"/></svg>`;
 const ICON_EDIT = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 2.5 13.5 4.5 5.5 12.5l-3.5 1 1-3.5z"/></svg>`;
+const ICON_TRASH = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11M6.5 4V2.5h3V4M4 4.5l.7 9h6.6l.7-9"/><path d="M6.8 7v4M9.2 7v4"/></svg>`;
+const ICON_RESTORE = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a5 5 0 1 1 1.5 3.6M3 8V4.5M3 8h3.5"/></svg>`;
 const ICON_LINKEDIN = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="2.5"/><text x="8" y="11.2" text-anchor="middle" font-size="7.5" font-weight="bold" fill="currentColor" stroke="none" font-family="Arial, sans-serif">in</text></svg>`;
+
+let showDeleted = false;
 
 async function loadJobs() {
   const box = document.getElementById("jobs");
   try {
-    const {jobs} = await api("/api/jobs");
-    if (!jobs.length) { box.innerHTML = '<span class="muted">No applications yet — paste a URL above.</span>'; return; }
-    box.innerHTML = `<table><tr><th>Company</th><th>Role</th><th>Match</th><th>Links</th></tr>` +
-      jobs.map(j => `<tr><td><b>${esc(j.company)}</b><div class="skills">${esc((j.matching_skills||[]).join(", "))}</div></td>
+    const {jobs} = await api("/api/jobs?include_deleted=1");
+    const active = jobs.filter(j => !j.deleted);
+    const deleted = jobs.filter(j => j.deleted);
+    if (!active.length && !deleted.length) { box.innerHTML = '<span class="muted">No applications yet — paste a URL above.</span>'; return; }
+    box.innerHTML = (active.length ? `<table><tr><th>Company</th><th>Role</th><th>Match</th><th>Links</th></tr>` +
+      active.map(j => `<tr><td><b>${esc(j.company)}</b><div class="skills">${esc((j.matching_skills||[]).join(", "))}</div></td>
         <td>${esc(j.title)}${(j.missing_skills||[]).length ? `<div class="skills">missing: ${esc(j.missing_skills.join(", "))}</div>` : ""}</td>
         <td>${j.match_score == null ? "—" : `<span class="score">${j.match_score}%</span>`}</td>
-        <td style="white-space:nowrap"><button class="icon-link" style="background:none;border:0;cursor:pointer" onclick="openEditor('${esc(j.dir)}')" title="Edit resume .tex" aria-label="Edit resume">${ICON_EDIT}</button>${j.pdf_url ? `<a class="icon-link" href="${j.pdf_url}" target="_blank" title="Open tailored PDF" aria-label="Open tailored PDF">${ICON_PDF}</a>` : '<span class="muted" title="No PDF produced">—</span>'}${j.apply_link ? `<a class="icon-link" href="${esc(j.apply_link)}" target="_blank" title="Apply manually (opens job posting)" aria-label="Apply manually">${ICON_APPLY}</a>` : ""}</td></tr>`).join("") + `</table>`;
+        <td style="white-space:nowrap"><button class="icon-link" style="background:none;border:0;cursor:pointer" onclick="openEditor('${esc(j.dir)}')" title="Edit resume .tex" aria-label="Edit resume">${ICON_EDIT}</button>${j.pdf_url ? `<a class="icon-link" href="${j.pdf_url}" target="_blank" title="Open tailored PDF" aria-label="Open tailored PDF">${ICON_PDF}</a>` : '<span class="muted" title="No PDF produced">—</span>'}${j.apply_link ? `<a class="icon-link" href="${esc(j.apply_link)}" target="_blank" title="Apply manually (opens job posting)" aria-label="Apply manually">${ICON_APPLY}</a>` : ""}<button class="icon-link" style="background:none;border:0;cursor:pointer" onclick="deleteJob('${esc(j.dir)}','${esc(j.company)}')" title="Hide (soft delete — restorable)" aria-label="Hide application">${ICON_TRASH}</button></td></tr>`).join("") + `</table>` : '<span class="muted">No active applications.</span>')
+      + (deleted.length ? `<div style="margin-top:10px"><a href="#" onclick="showDeleted=!showDeleted;loadJobs();return false;" class="muted">${showDeleted ? "Hide" : "Show"} hidden (${deleted.length})</a>
+        ${showDeleted ? `<table style="margin-top:6px; opacity:.75"><tr><th>Company</th><th>Role</th><th></th></tr>` +
+          deleted.map(j => `<tr><td>${esc(j.company)}</td><td>${esc(j.title)}</td>
+            <td><button class="icon-link" style="background:none;border:0;cursor:pointer" onclick="restoreJob('${esc(j.dir)}')" title="Restore" aria-label="Restore application">${ICON_RESTORE}</button></td></tr>`).join("") + `</table>` : ""}</div>` : "");
   } catch (e) { box.innerHTML = `<span class="muted">Could not load jobs: ${esc(e.message)}</span>`; }
+}
+
+async function deleteJob(dir, company) {
+  if (!confirm(`Hide "${company}" from Tracked applications?\n\nNothing is erased — restore anytime via “Show hidden”. Your Google Sheet row is untouched.`)) return;
+  try {
+    await api("/api/jobs/delete", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({dir})});
+    loadJobs();
+  } catch (e) { alert("Delete failed: " + e.message); }
+}
+
+async function restoreJob(dir) {
+  try {
+    await api("/api/jobs/restore", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({dir})});
+    loadJobs();
+  } catch (e) { alert("Restore failed: " + e.message); }
 }
 
 async function pollTask(tid, logEl, statusEl, onDone) {
@@ -686,7 +711,7 @@ async function runConsole() {
 async function checkVersion() {
   try {
     const {version} = await api("/api/version");
-    if (version !== 3) throw new Error("mismatch");
+    if (version !== 4) throw new Error("mismatch");
   } catch (e) {
     document.getElementById("staleBanner").style.display = "block";
   }

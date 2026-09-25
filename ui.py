@@ -30,7 +30,7 @@ UI_HTML = ROOT / "ui.html"
 # Bump on EVERY ui.py/ui.html change. The page checks this on load and
 # shows a restart banner instead of cryptic 404s from a stale server.
 # (test_ui.py::test_frontend_backend_version_sync enforces the match.)
-UI_VERSION = 3
+UI_VERSION = 4
 
 _tasks: dict[str, dict] = {}
 _tasks_lock = threading.Lock()
@@ -52,14 +52,63 @@ def safe_output_path(rel: str) -> Path | None:
     return p if p.exists() else None
 
 
-def list_jobs() -> list[dict]:
-    """Tracked applications derived from output/*/job.json (+match.json)."""
+def _tombstone_path() -> Path:
+    from src.utils import OUTPUT_ROOT
+    return OUTPUT_ROOT / ".deleted.json"
+
+
+def load_tombstones() -> set[str]:
+    """Dirs the user soft-deleted (hidden, restorable, never erased)."""
+    try:
+        data = json.loads(_tombstone_path().read_text(encoding="utf-8"))
+        return set(data.get("deleted", [])) if isinstance(data, dict) else set()
+    except Exception:
+        return set()
+
+
+def _save_tombstones(names: set[str]) -> None:
+    from src.utils import OUTPUT_ROOT
+    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    # prune entries whose folders are gone entirely
+    names = {n for n in names if (OUTPUT_ROOT / n).exists()}
+    _tombstone_path().write_text(json.dumps({"deleted": sorted(names)}), encoding="utf-8")
+
+
+def soft_delete_job(job_dir_name: str) -> dict:
+    d = _job_dir(job_dir_name)
+    if d is None:
+        raise ValueError("Unknown job folder.")
+    tomb = load_tombstones()
+    tomb.add(d.name)
+    _save_tombstones(tomb)
+    return {"ok": True, "dir": d.name, "deleted": True}
+
+
+def restore_job(job_dir_name: str) -> dict:
+    name = (job_dir_name or "").strip()
+    if not name or "/" in name or "\\" in name:
+        raise ValueError("Unknown job folder.")
+    tomb = load_tombstones()
+    tomb.discard(name)
+    _save_tombstones(tomb)
+    return {"ok": True, "dir": name, "deleted": False}
+
+
+def list_jobs(include_deleted: bool = False) -> list[dict]:
+    """Tracked applications derived from output/*/job.json (+match.json).
+
+    Soft-deleted folders are hidden unless include_deleted=True (flagged).
+    """
     from src.utils import OUTPUT_ROOT
     jobs: list[dict] = []
     if not OUTPUT_ROOT.exists():
         return jobs
+    tomb = load_tombstones()
     for d in sorted(OUTPUT_ROOT.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
         if not d.is_dir():
+            continue
+        deleted = d.name in tomb
+        if deleted and not include_deleted:
             continue
         jf = d / "job.json"
         if not jf.exists():
@@ -76,6 +125,7 @@ def list_jobs() -> list[dict]:
         pdfs = sorted(d.glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True)
         jobs.append({
             "dir": d.name,
+            "deleted": deleted,
             "company": job.get("company", "?"),
             "title": job.get("title", "?"),
             "match_score": match.get("match_score"),
@@ -563,7 +613,9 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/doctor":
                 self._json({"checks": doctor_status()})
             elif path == "/api/jobs":
-                self._json({"jobs": list_jobs()})
+                qs = urllib.parse.parse_qs(parsed.query)
+                inc = qs.get("include_deleted", [""])[0] in ("1", "true", "yes")
+                self._json({"jobs": list_jobs(include_deleted=inc)})
             elif path == "/api/sheet":
                 self._json({"sheet_url": get_sheet_url()})
             elif path == "/api/version":
@@ -639,6 +691,18 @@ class Handler(BaseHTTPRequestHandler):
                 body = self._read_json()
                 res = console_dispatch(body.get("command", ""))
                 self._json(res, 200 if "error" not in res else 400)
+            elif parsed.path == "/api/jobs/delete":
+                body = self._read_json()
+                try:
+                    self._json(soft_delete_job(body.get("dir", "")))
+                except ValueError as e:
+                    self._json({"error": str(e)}, 400)
+            elif parsed.path == "/api/jobs/restore":
+                body = self._read_json()
+                try:
+                    self._json(restore_job(body.get("dir", "")))
+                except ValueError as e:
+                    self._json({"error": str(e)}, 400)
             elif parsed.path == "/api/tex":
                 body = self._read_json()
                 try:

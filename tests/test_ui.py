@@ -380,6 +380,50 @@ def test_render_preview_success_and_failure(tmp_path, monkeypatch):
         U.render_preview("  ")
 
 
+def _seed_job(root, name="HP_1", company="HP"):
+    d = root / name
+    d.mkdir(exist_ok=True)
+    (d / "job.json").write_text(json.dumps({"company": company, "title": "T"}))
+    return d
+
+
+def test_soft_delete_hides_but_keeps_data(tmp_path, monkeypatch):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "OUTPUT_ROOT", tmp_path)
+    _seed_job(tmp_path)
+    assert len(U.list_jobs()) == 1
+    res = U.soft_delete_job("HP_1")
+    assert res["deleted"] is True
+    assert U.list_jobs() == []
+    full = U.list_jobs(include_deleted=True)
+    assert len(full) == 1 and full[0]["deleted"] is True
+    # folder + files untouched on disk
+    assert (tmp_path / "HP_1" / "job.json").exists()
+    res = U.restore_job("HP_1")
+    assert res["deleted"] is False
+    assert len(U.list_jobs()) == 1
+
+
+def test_soft_delete_rejects_unknown(tmp_path, monkeypatch):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "OUTPUT_ROOT", tmp_path)
+    with pytest.raises(ValueError):
+        U.soft_delete_job("Nope_1")
+    with pytest.raises(ValueError):
+        U.soft_delete_job("../agent")
+
+
+def test_tombstone_prunes_missing_dirs(tmp_path, monkeypatch):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "OUTPUT_ROOT", tmp_path)
+    _seed_job(tmp_path, "Gone_1")
+    U.soft_delete_job("Gone_1")
+    import shutil
+    shutil.rmtree(tmp_path / "Gone_1")
+    U.restore_job("Other_1")  # any write prunes
+    assert U.load_tombstones() == set()
+
+
 def test_get_sheet_url_empty_when_unconfigured(monkeypatch):
     import src.config as C
     def boom(**k):
