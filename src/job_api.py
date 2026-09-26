@@ -91,9 +91,41 @@ def _pick(d: dict, *keys: str, default: str = "") -> str:
     return default
 
 
-def fetch_job(job_id_or_url: str, api_key: str, host: str, endpoint: str,
+def fetch_job(job_id_or_url: str, api_key: str | list[str], host: str, endpoint: str,
               timeout: int = 20) -> Job:
-    """Call RapidAPI job-details endpoint, normalize to Job."""
+    """Call RapidAPI job-details endpoint, normalize to Job.
+
+    Rotates across comma-separated keys when one reports quota exhaustion.
+    """
+    from src.keypool import get_pool, is_quota_error
+    pool = get_pool("rapidapi", api_key)
+    if not pool:
+        raise JobFetchError(
+            "Missing RAPIDAPI_KEY. Fix: run 'python agent.py setup' or use '--demo'.")
+    last: Exception | None = None
+    tried = 0
+    for _ in range(len(pool)):
+        key = pool.next()
+        tried += 1
+        try:
+            job = _fetch_job_once(job_id_or_url, key, host, endpoint, timeout)
+            pool.report_success(key)
+            return job
+        except JobFetchError as e:
+            if not is_quota_error(e):
+                raise
+            pool.report_quota(key)
+            last = e
+    if tried > 1 and last is not None:
+        raise JobFetchError(
+            f"RapidAPI quota exhausted (tried {tried} keys). "
+            "Wait for reset, add keys from another account, or use --demo.") from last
+    raise last if last is not None else JobFetchError("Job fetch failed.")
+
+
+def _fetch_job_once(job_id_or_url: str, api_key: str, host: str, endpoint: str,
+                    timeout: int = 20) -> Job:
+    """Single-key job-details call (see fetch_job for rotation)."""
     source_url = job_id_or_url if job_id_or_url.startswith("http") else ""
     job_id = parse_job_id(job_id_or_url) if source_url else job_id_or_url
 
@@ -329,13 +361,43 @@ def _raise_if_backend_error(data: dict) -> None:
         )
 
 
-def search_jobs(query: str, api_key: str, host: str, search_endpoint: str,
+def search_jobs(query: str, api_key: str | list[str], host: str, search_endpoint: str,
                 country: str = "in", timeout: int = 45) -> list[dict]:
     """Text search via /search-v2. Returns raw job dicts (JSearch IDs).
 
     RapidAPI is flaky: one automatic retry on timeout before giving up.
-    Search always gets at least a 45s budget per attempt.
+    Search always gets at least a 45s budget per attempt. Rotates across
+    comma-separated keys on quota errors.
     """
+    from src.keypool import get_pool, is_quota_error
+    pool = get_pool("rapidapi", api_key)
+    if not pool:
+        raise JobFetchError(
+            "Missing RAPIDAPI_KEY. Fix: run 'python agent.py setup' or use '--demo'.")
+    last: Exception | None = None
+    tried = 0
+    for _ in range(len(pool)):
+        key = pool.next()
+        tried += 1
+        try:
+            jobs = _search_jobs_once(query, key, host, search_endpoint, country, timeout)
+            pool.report_success(key)
+            return jobs
+        except JobFetchError as e:
+            if not is_quota_error(e):
+                raise
+            pool.report_quota(key)
+            last = e
+    if tried > 1 and last is not None:
+        raise JobFetchError(
+            f"RapidAPI quota exhausted (tried {tried} keys). "
+            "Wait for reset, add keys from another account, or use --demo.") from last
+    raise last if last is not None else JobFetchError("Job search failed.")
+
+
+def _search_jobs_once(query: str, api_key: str, host: str, search_endpoint: str,
+                      country: str = "in", timeout: int = 45) -> list[dict]:
+    """Single-key /search-v2 call (see search_jobs for rotation + retry)."""
     timeout = max(timeout or 0, 45)
     headers = {"X-RapidAPI-Key": api_key, "X-RapidAPI-Host": host}
     params = {"query": query, "country": country or "in", "num_pages": "1"}
@@ -399,7 +461,7 @@ def _score_candidate(title: str, company: str, cand: dict) -> tuple[float, bool]
     return (2.0 if hit else 0.0) + overlap, hit
 
 
-def enrich_via_search(public: Job, api_key: str, host: str, details_endpoint: str,
+def enrich_via_search(public: Job, api_key: str | list[str], host: str, details_endpoint: str,
                       search_endpoint: str, country: str = "in",
                       timeout: int = 20) -> Job | None:
     """Match a public-page record to JSearch and return the rich record.
@@ -436,7 +498,7 @@ def enrich_via_search(public: Job, api_key: str, host: str, details_endpoint: st
     return None
 
 
-def fetch_job_auto(job_id_or_url: str, api_key: str, host: str, endpoint: str,
+def fetch_job_auto(job_id_or_url: str, api_key: str | list[str], host: str, endpoint: str,
                    timeout: int = 20,
                    search_endpoint: str = "https://jsearch.p.rapidapi.com/search-v2",
                    country: str = "in") -> Job:

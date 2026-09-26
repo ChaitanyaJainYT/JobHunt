@@ -211,6 +211,79 @@ def test_friendly_error_uses_api_code():
     assert "LLM call failed" in str(llm._friendly_transport_error(None))
 
 
+def _quota_err(msg="429 Too Many Requests"):
+    return Exception(msg)
+
+
+def test_gemini_pool_rotates_on_quota(monkeypatch):
+    from src import llm
+    from src.keypool import _POOLS
+    _POOLS.clear()
+    calls = []
+
+    class FakeModels:
+        def __init__(self, key):
+            self.key = key
+        def generate_content(self, model=None, contents=None, config=None):
+            calls.append(self.key)
+            if self.key == "k1":
+                raise _quota_err()
+            return type("R", (), {"text": "ok"})()
+
+    class FakeClient:
+        def __init__(self, api_key=None):
+            self.models = FakeModels(api_key)
+
+    monkeypatch.setattr("google.genai.Client", FakeClient)
+    out = llm._call_gemini("p", ["k1", "k2"], "m", 60)
+    assert out == "ok" and calls == ["k1", "k2"]
+    _POOLS.clear()
+
+
+def test_gemini_pool_single_key_preserves_error(monkeypatch):
+    from src import llm
+    from src.keypool import _POOLS
+    _POOLS.clear()
+
+    class FakeModels:
+        def generate_content(self, model=None, contents=None, config=None):
+            raise _quota_err("429 custom quota message")
+
+    class FakeClient:
+        def __init__(self, api_key=None):
+            self.models = FakeModels()
+
+    monkeypatch.setattr("google.genai.Client", FakeClient)
+    try:
+        llm._call_gemini("p", "only", "m", 60)
+        assert False, "should raise"
+    except Exception as e:
+        assert "custom quota message" in str(e)  # original error, not aggregate
+    _POOLS.clear()
+
+
+def test_gemini_pool_all_drained_aggregates(monkeypatch):
+    from src import llm
+    from src.keypool import _POOLS
+    _POOLS.clear()
+
+    class FakeModels:
+        def generate_content(self, model=None, contents=None, config=None):
+            raise _quota_err()
+
+    class FakeClient:
+        def __init__(self, api_key=None):
+            self.models = FakeModels()
+
+    monkeypatch.setattr("google.genai.Client", FakeClient)
+    try:
+        llm._call_gemini("p", ["k1", "k2"], "m", 60)
+        assert False, "should raise"
+    except Exception as e:
+        assert "tried 2" in str(e)
+    _POOLS.clear()
+
+
 def test_groq_fallback_on_gemini_quota(monkeypatch):
     calls = []
     def fake_gemini(prompt, api_key, model, timeout):
