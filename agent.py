@@ -22,7 +22,7 @@ def main(argv=None) -> int:
         if cmd == "doctor":
             return print_doctor(run_doctor())
         if cmd == "setup":
-            run_setup_wizard()
+            run_setup_wizard(open_browser=not getattr(ns, "no_browser", False))
             return print_doctor(run_doctor())
         if cmd == "apply":
             from src.pipeline import run_apply

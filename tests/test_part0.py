@@ -60,18 +60,93 @@ def test_demo_mode_skips_keys(tmp_path, monkeypatch):
     assert cfg.gemini_api_key == "demo"
 
 
-def test_wizard_creates_env(tmp_path, monkeypatch):
+def test_wizard_guided_flow(tmp_path, monkeypatch):
+    import json as _json
+    import src.utils as UT
     env = tmp_path / ".env"
     ex = tmp_path / ".env.example"
     ex.write_text("GEMINI_API_KEY=\n", encoding="utf-8")
     monkeypatch.setattr(C, "ENV_PATH", env)
     monkeypatch.setattr(C, "ENV_EXAMPLE", ex)
-    answers = iter(["g-wiz", "", "", "", "r-wiz", "", "", "", "", "s-wiz", "", "", "", ""])
+    monkeypatch.setattr(UT, "PROJECT_ROOT", tmp_path)
+    (tmp_path / "main.tex").write_text("resume", encoding="utf-8")
+    (tmp_path / "credentials.json").write_text(
+        _json.dumps({"installed": {"client_id": "x.apps.googleusercontent.com"}}),
+        encoding="utf-8")
+    (tmp_path / "profile.md.example").write_text("# template", encoding="utf-8")
+    answers = iter(["AIza" + "g" * 35, "", "r" * 50,
+                    "https://docs.google.com/spreadsheets/d/SHEETID1234567890ab/edit",
+                    "", "n"])
     monkeypatch.setattr("builtins.input", lambda _="": next(answers))
+    opened = []
+    monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
     cfg = C.run_setup_wizard()
     assert env.exists()
-    assert cfg.gemini_api_key == "g-wiz"
-    assert cfg.rapidapi_key == "r-wiz"
+    assert cfg.gemini_api_key == "AIza" + "g" * 35
+    assert cfg.rapidapi_key == "r" * 50
+    assert cfg.google_sheet_id == "SHEETID1234567890ab"
+    assert cfg.applicant_name == "Chaitanya Jain"  # default accepted
+    assert opened == ["https://aistudio.google.com/app/apikey",
+                      "https://console.groq.com/keys",
+                      "https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch",
+                      "https://sheets.google.com"]
+
+
+def test_wizard_no_open_flag(tmp_path, monkeypatch):
+    import src.utils as UT
+    env = tmp_path / ".env"
+    env.write_text("GEMINI_API_KEY=AIza" + "g" * 35 + "\n"
+                   "RAPIDAPI_KEY=" + "r" * 50 + "\n"
+                   "GOOGLE_SHEET_ID=" + "S" * 44 + "\n", encoding="utf-8")
+    monkeypatch.setattr(C, "ENV_PATH", env)
+    monkeypatch.setattr(UT, "PROJECT_ROOT", tmp_path)
+    (tmp_path / "main.tex").write_text("resume", encoding="utf-8")
+    (tmp_path / "credentials.json").write_text('{"installed": {"client_id": "x"}}',
+                                               encoding="utf-8")
+    (tmp_path / "profile.md").write_text("# me", encoding="utf-8")
+    answers = iter(["", "", ""])  # groq skip, applicant default, (profile exists: no prompt)
+    monkeypatch.setattr("builtins.input", lambda _="": next(answers))
+    opened = []
+    monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
+    C.run_setup_wizard(open_browser=False)
+    assert opened == []
+
+
+def _main_tex_item():
+    import src.setup_guide as G
+    return next(i for i in G.SETUP_ITEMS if i.key == "main.tex")
+
+
+def test_wizard_copies_base_resume(tmp_path, monkeypatch):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "PROJECT_ROOT", tmp_path)
+    src = tmp_path / "resume.tex"
+    src.write_text("\\documentclass{a}\n\\begin{document}\nHi\n\\end{document}",
+                   encoding="utf-8")
+    monkeypatch.setattr("builtins.input", lambda _: str(src))
+    assert C._wizard_file_item(_main_tex_item(), False) is True
+    assert (tmp_path / "main.tex").read_text(encoding="utf-8") == src.read_text(encoding="utf-8")
+
+
+def test_wizard_skips_prompt_when_present(tmp_path, monkeypatch):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "PROJECT_ROOT", tmp_path)
+    (tmp_path / "main.tex").write_text("old", encoding="utf-8")
+    monkeypatch.setattr("builtins.input", lambda _: (_ for _ in ()).throw(AssertionError("no prompt expected")))
+    assert C._wizard_file_item(_main_tex_item(), False) is True  # exists: no prompt
+    assert (tmp_path / "main.tex").read_text(encoding="utf-8") == "old"
+
+
+def test_wizard_rejects_non_latex(tmp_path, monkeypatch, capsys):
+    import src.utils as UT
+    monkeypatch.setattr(UT, "PROJECT_ROOT", tmp_path)
+    src = tmp_path / "notes.txt"
+    src.write_text("just prose", encoding="utf-8")
+    answers = iter([str(src), ""])
+    monkeypatch.setattr("builtins.input", lambda _: next(answers))
+    assert C._wizard_file_item(_main_tex_item(), False) is True
+    assert not (tmp_path / "main.tex").exists()
+    assert "Not usable" in capsys.readouterr().out
 
 
 def test_doctor_reports_tectonic_missing(monkeypatch):

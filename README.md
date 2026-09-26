@@ -11,13 +11,19 @@ python agent.py --demo "https://www.linkedin.com/jobs/view/4012345678"
 python agent.py check-mail --demo --days 7
 ```
 
-Real run (one-time setup, then one command per job):
+Real run (one-time guided setup — key pages open automatically, base resume uploadable from the Setup panel — then one command per job):
 
 ```bash
-python agent.py setup        # paste keys interactively
+python agent.py setup        # guided: opens each key page, you paste, it validates
+python agent.py setup --no-open  # same, but only prints links (SSH/headless)
 python agent.py "https://www.linkedin.com/jobs/view/4012345678"
 python agent.py check-mail
 ```
+
+Prefer the browser? `python agent.py ui` → rail → **Setup** panel: same steps with
+per-item status pills, open-in-new-tab key links, and paste-and-save boxes.
+Setup never makes network calls — pasted values are format-checked locally,
+and `doctor` stays the final verifier.
 
 ## Web UI (easiest)
 
@@ -35,7 +41,7 @@ Opens `http://127.0.0.1:8765` (localhost only, no extra packages). Top to bottom
 | `python agent.py apply --url "<url>" [--out DIR]` | Same as above (explicit) |
 | `python agent.py check-mail [--days 14]` | Scan Gmail for tracked companies, update Sheet status |
 | `python agent.py doctor` | Health check: Python, tectonic, .env, resume, Google creds, deps |
-| `python agent.py setup` | Interactive `.env` wizard (asks only missing keys) |
+| `python agent.py setup [--no-open]` | Guided setup: opens each key page, validates pastes, saves incrementally (Ctrl+C keeps progress) |
 | `--demo` / `--mock` | Offline trial with fixtures, no keys or network |
 
 Exit codes: `0` ok, `2` config error, `3` fetch/match error, `4` PDF compile failed (tex preserved).
@@ -44,20 +50,20 @@ Exit codes: `0` ok, `2` config error, `3` fetch/match error, `4` PDF compile fai
 
 Copy `.env.example` to `.env` (auto-created) or run `setup`.
 
-| Key | Required | Where to get |
+| Key | Required | Where to get (setup opens these for you) |
 |---|---|---|
-| `GEMINI_API_KEY` (or `GROQ_API_KEY`) | yes (one) | https://aistudio.google.com/app/apikey |
-| `GROQ_API_KEY` / `GROQ_MODEL` | no | Free at https://console.groq.com — auto-used when Gemini hits quota |
+| `GEMINI_API_KEY` (or `GROQ_API_KEY`) | yes (one) | https://aistudio.google.com/app/apikey — comma-separated for rotation |
+| `GROQ_API_KEY` / `GROQ_MODEL` | no | https://console.groq.com/keys — auto-used when Gemini hits quota |
 | `LINKEDIN_PROFILE_URL` | no | Your public LinkedIn profile URL (headline/about supplement) |
 | `LINKEDIN_PROFILE_FILE` | no | Local supplement, default `profile.md` |
 | `LLM_MODEL` | no | default `gemini-3.6-flash` |
-| `RAPIDAPI_KEY` | yes | https://rapidapi.com, subscribe JSearch free tier |
+| `RAPIDAPI_KEY` | yes | https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch — Pricing → Subscribe → key under the Security tab |
 | `RAPIDAPI_HOST` | no | default `jsearch.p.rapidapi.com` |
 | `RAPIDAPI_JOB_ENDPOINT` | no | default `https://jsearch.p.rapidapi.com/job-details` |
 | `RAPIDAPI_SEARCH_ENDPOINT` | no | default `https://jsearch.p.rapidapi.com/search-v2` |
 | `RAPIDAPI_COUNTRY` | no | JSearch country bias, default `in` |
-| `GOOGLE_SHEET_ID` | yes | from Sheet URL between `/d/` and `/edit` |
-| `GOOGLE_CREDENTIALS_FILE` | no | default `credentials.json` (Desktop OAuth client) |
+| `GOOGLE_SHEET_ID` | yes | https://sheets.google.com — paste URL or ID |
+| `GOOGLE_CREDENTIALS_FILE` | no | default `credentials.json` (Desktop OAuth client from https://console.cloud.google.com/apis/credentials) |
 
 ## Prereqs
 

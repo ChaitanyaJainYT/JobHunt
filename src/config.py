@@ -94,8 +94,25 @@ def _write_dotenv(path: Path, values: dict[str, str]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def run_setup_wizard() -> AppConfig:
-    """Interactively ask for missing keys and save .env. Returns loaded config."""
+def _open_key_page(url: str, open_browser: bool) -> None:
+    if not url or not open_browser:
+        return
+    try:
+        import webbrowser
+        webbrowser.open(url)
+        print(f"(opened in browser: {url})")
+    except Exception:
+        pass  # headless/SSH: the printed link suffices
+
+
+def run_setup_wizard(open_browser: bool = True) -> AppConfig:
+    """Guided setup: per-item instructions + key-page links, validated paste.
+
+    Prompts only for missing/invalid items; saves incrementally so Ctrl+C
+    keeps progress. Silent defaults fill the advanced keys.
+    """
+    from src.setup_guide import SETUP_ITEMS, check_credentials_file, validate_item
+    from src.utils import PROJECT_ROOT
     _ensure_env_file_exists()
     values = _read_dotenv(ENV_PATH)
     # Also respect real environment variables (CI).
@@ -103,41 +120,190 @@ def run_setup_wizard() -> AppConfig:
         if not values.get(env_key) and os.environ.get(env_key):
             values[env_key] = os.environ[env_key]
 
-    print("\n== JobHunt setup ==")
-    print("Press Enter to keep [default] / skip optional keys.\n")
-    for env_key, attr, required, prompt in _MANAGED_KEYS:
-        current = values.get(env_key, "")
-        if current and required:
-            continue  # already set, don't re-ask
-        try:
-            answer = input(f"{prompt}: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nSetup cancelled.")
-            break
-        if answer:
-            values[env_key] = answer
-        elif env_key == "LLM_MODEL" and not values.get(env_key):
-            values[env_key] = "gemini-3.6-flash"
-        elif env_key == "GROQ_MODEL" and not values.get(env_key):
-            values[env_key] = "openai/gpt-oss-120b"
-        elif env_key == "RAPIDAPI_HOST" and not values.get(env_key):
-            values[env_key] = "jsearch.p.rapidapi.com"
-        elif env_key == "RAPIDAPI_JOB_ENDPOINT" and not values.get(env_key):
-            values[env_key] = "https://jsearch.p.rapidapi.com/job-details"
-        elif env_key == "RAPIDAPI_SEARCH_ENDPOINT" and not values.get(env_key):
-            values[env_key] = "https://jsearch.p.rapidapi.com/search-v2"
-        elif env_key == "RAPIDAPI_COUNTRY" and not values.get(env_key):
-            values[env_key] = "in"
-        elif env_key == "GOOGLE_CREDENTIALS_FILE" and not values.get(env_key):
-            values[env_key] = "credentials.json"
-        elif env_key == "APPLICANT_NAME" and not values.get(env_key):
-            values[env_key] = "Chaitanya Jain"
-        elif env_key == "LINKEDIN_PROFILE_FILE" and not values.get(env_key):
-            values[env_key] = "profile.md"
+    # Silent defaults for advanced keys (never prompted).
+    _SILENT_DEFAULTS = {
+        "LLM_MODEL": "gemini-3.6-flash",
+        "GROQ_MODEL": "openai/gpt-oss-120b",
+        "RAPIDAPI_HOST": "jsearch.p.rapidapi.com",
+        "RAPIDAPI_JOB_ENDPOINT": "https://jsearch.p.rapidapi.com/job-details",
+        "RAPIDAPI_SEARCH_ENDPOINT": "https://jsearch.p.rapidapi.com/search-v2",
+        "RAPIDAPI_COUNTRY": "in",
+        "GOOGLE_CREDENTIALS_FILE": "credentials.json",
+        "LINKEDIN_PROFILE_URL": "",
+        "LINKEDIN_PROFILE_FILE": "profile.md",
+    }
+    for k, default in _SILENT_DEFAULTS.items():
+        if not values.get(k):
+            values[k] = default
+
+    print("\n== JobHunt guided setup ==")
+    print("Each step shows where to get the value; the page opens automatically.")
+    print("Blank = keep existing / skip optional. Ctrl+C keeps saved progress.\n")
+
+    # Gemini is satisfiable via Groq alone (mirrors _missing_required).
+    groq_ok = bool(values.get("GROQ_API_KEY", "").strip())
+
+    for it in SETUP_ITEMS:
+        if it.kind == "file":
+            if _wizard_file_item(it, open_browser) is None:
+                break  # user cancelled
+            continue
+        current = values.get(it.key, "")
+        if it.key == "GEMINI_API_KEY" and groq_ok and not current:
+            print(f"[skip] {it.title} — Groq key present, Gemini optional.\n")
+            continue
+        ok, _ = validate_item(it, current)
+        if ok and current:
+            print(f"[ok] {it.title} — already set.\n")
+            continue
+        if _wizard_env_item(it, values, open_browser) is None:
+            break  # user cancelled
+        if it.key == "GROQ_API_KEY" and values.get("GROQ_API_KEY", "").strip():
+            groq_ok = True
 
     _write_dotenv(ENV_PATH, values)
-    print(f"\nSaved to {ENV_PATH}. You can re-run with: python agent.py doctor")
+    print(f"\nSaved to {ENV_PATH}. Run 'python agent.py doctor' to verify.")
     return _from_values(values, demo=False)
+
+
+def _wizard_env_item(it, values: dict, open_browser: bool):
+    """Prompt-validate loop for one env item. Returns False-ish None on cancel."""
+    from src.setup_guide import validate_item
+    print(f"--- {it.title} ---")
+    if it.why:
+        print(it.why)
+    for i, step in enumerate(it.steps, 1):
+        print(f"  {i}. {step}")
+    if it.open_url:
+        print(f"  Link: {it.open_url}")
+        _open_key_page(it.open_url, open_browser)
+    while True:
+        try:
+            hint = ""
+            if it.optional:
+                hint = " (Enter to skip)"
+            elif it.default:
+                hint = f" (Enter for '{it.default}')"
+            answer = input(f"Paste {it.title}{hint}: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nSetup paused (progress saved).")
+            return None
+        if not answer and it.optional:
+            print("(skipped)\n")
+            return True
+        if not answer and it.default:
+            values[it.key] = it.default
+            _write_dotenv(ENV_PATH, values)
+            print(f"Using default: {it.default}\n")
+            return True
+        if not answer:
+            print("This one is required — paste the value, or Ctrl+C to pause.\n")
+            continue
+        ok, msg = validate_item(it, answer)
+        if ok:
+            from src.setup_guide import extract_sheet_id
+            values[it.key] = (extract_sheet_id(answer) if it.key == "GOOGLE_SHEET_ID"
+                              else answer)
+            _write_dotenv(ENV_PATH, values)
+            print("Saved.\n")
+            return True
+        print(f"That doesn't look right: {msg}\nTry again (Ctrl+C pauses, keeps progress).\n")
+
+
+def _wizard_file_item(it, open_browser: bool):
+    """Check-and-guide for file items. Returns None on cancel."""
+    from src.setup_guide import check_credentials_file
+    from src.utils import PROJECT_ROOT
+    if it.key == "credentials.json":
+        err = check_credentials_file(PROJECT_ROOT / "credentials.json")
+        if not err:
+            print("[ok] Google OAuth client file — found.\n")
+            return True
+        print(f"--- {it.title} ---")
+        for i, step in enumerate(it.steps, 1):
+            print(f"  {i}. {step}")
+        print(f"  Link: {it.open_url}")
+        _open_key_page(it.open_url, open_browser)
+        while True:
+            try:
+                answer = input("Press Enter when the file is placed "
+                               "(or type 'skip'): ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print("\nSetup paused (progress saved).")
+                return None
+            if answer == "skip":
+                print("(skipped — Gmail/Sheets steps will fail until added)\n")
+                return True
+            err = check_credentials_file(PROJECT_ROOT / "credentials.json")
+            if not err:
+                print("Found and valid.\n")
+                return True
+            print(f"Still not right: {err}\n")
+    elif it.key == "main.tex":
+        from src.utils import PROJECT_ROOT as _PR
+        if (_PR / "main.tex").is_file():
+            print("[ok] Base resume — main.tex found.\n")
+            return True
+        print("[!!] Base resume — main.tex missing (tailoring needs it).")
+        print("Give a .tex file path and it will be copied into place.\n")
+        from src.setup_guide import install_base_resume
+        while True:
+            try:
+                answer = input("Path to your .tex resume (Enter to skip): ").strip().strip('"').strip("'")
+            except (EOFError, KeyboardInterrupt):
+                print("\nSetup paused (progress saved).")
+                return None
+            if not answer:
+                print("(skipped — add main.tex later)\n")
+                return True
+            from pathlib import Path as _P
+            src = _P(answer).expanduser()
+            if not src.is_file():
+                print(f"Not found: {answer}\n")
+                continue
+            try:
+                content = src.read_text(encoding="utf-8")
+            except Exception as e:
+                print(f"Couldn't read it: {e}\n")
+                continue
+            if (_PR / "main.tex").is_file():
+                try:
+                    go = input("main.tex appeared meanwhile — replace it? [y/N]: ").strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    print("\nSetup paused (progress saved).")
+                    return None
+                if go != "y":
+                    print("(kept existing)\n")
+                    return True
+            try:
+                res = install_base_resume(content, _PR)
+            except ValueError as e:
+                print(f"Not usable: {e}\n")
+                continue
+            extra = f" (previous kept as {res['backup']})" if res["replaced"] else ""
+            print(f"Installed as main.tex{extra}.\n")
+            return True
+    elif it.key == "profile.md":
+        from src.utils import PROJECT_ROOT as _PR2
+        if (_PR2 / "profile.md").is_file():
+            print("[ok] LinkedIn supplement — profile.md found.\n")
+            return True
+        try:
+            answer = input("Copy profile.md.example to profile.md now? [y/N]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\nSetup paused (progress saved).")
+            return None
+        if answer == "y":
+            try:
+                import shutil
+                shutil.copy(_PR2 / "profile.md.example", _PR2 / "profile.md")
+                print("Created profile.md — paste your About + Skills into it.\n")
+            except Exception as e:
+                print(f"Couldn't copy: {e}\n")
+        else:
+            print("(skipped — optional)\n")
+        return True
+    return True
 
 
 def _from_values(values: dict[str, str], demo: bool) -> AppConfig:

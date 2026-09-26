@@ -33,7 +33,9 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--demo", dest="demo", action="store_true", help="Use fixture emails.")
 
     sub.add_parser("doctor", help="Health check: python, tectonic, .env, resume, Google creds.")
-    sub.add_parser("setup", help="Interactive .env wizard.")
+    s = sub.add_parser("setup", help="Guided setup: key pages open, paste, validated.")
+    s.add_argument("--no-open", dest="no_browser", action="store_true",
+                   help="Don't auto-open key pages in the browser (print links only).")
     u = sub.add_parser("ui", help="Launch localhost web UI (paste URLs, download PDFs).")
     u.add_argument("--port", type=int, default=8765, help="Local port (default 8765).")
     u.add_argument("--no-browser", dest="no_browser", action="store_true",

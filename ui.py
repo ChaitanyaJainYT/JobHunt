@@ -30,7 +30,7 @@ UI_HTML = ROOT / "ui.html"
 # Bump on EVERY ui.py/ui.html change. The page checks this on load and
 # shows a restart banner instead of cryptic 404s from a stale server.
 # (test_ui.py::test_frontend_backend_version_sync enforces the match.)
-UI_VERSION = 8
+UI_VERSION = 10
 
 _tasks: dict[str, dict] = {}
 _tasks_lock = threading.Lock()
@@ -713,6 +713,9 @@ class Handler(BaseHTTPRequestHandler):
                     self._json({"error": str(e)}, 400)
             elif path == "/api/version":
                 self._json({"version": UI_VERSION})
+            elif path == "/api/setup/state":
+                from src.setup_guide import get_setup_state
+                self._json({"items": get_setup_state()})
             elif path == "/api/base":
                 try:
                     self._json(get_base_tex())
@@ -796,6 +799,32 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(restore_job(body.get("dir", "")))
                 except ValueError as e:
                     self._json({"error": str(e)}, 400)
+            elif parsed.path == "/api/setup/save":
+                body = self._read_json()
+                try:
+                    from src.setup_guide import save_setup_value
+                    self._json(save_setup_value(body.get("key", ""), body.get("value", "")))
+                except ValueError as e:
+                    self._json({"error": str(e)}, 400)
+            elif parsed.path == "/api/setup/upload-resume":
+                body = self._read_json()
+                try:
+                    from src.setup_guide import install_base_resume
+                    self._json(install_base_resume(body.get("content", "")))
+                except ValueError as e:
+                    self._json({"error": str(e)}, 400)
+            elif parsed.path == "/api/setup/profile-template":
+                from src.utils import PROJECT_ROOT
+                src = PROJECT_ROOT / "profile.md.example"
+                dst = PROJECT_ROOT / "profile.md"
+                if dst.is_file():
+                    self._json({"ok": True, "detail": "profile.md already exists"})
+                else:
+                    try:
+                        dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+                        self._json({"ok": True, "detail": "created profile.md from template"})
+                    except Exception as e:
+                        self._json({"error": f"Couldn't copy template: {e}"}, 400)
             elif parsed.path == "/api/tex":
                 body = self._read_json()
                 try:
