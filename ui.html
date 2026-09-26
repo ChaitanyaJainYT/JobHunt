@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JobHunt — Job Application Assistant</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2430; --muted:#687182; --line:#e3e6eb;
+          --ok:#157f3d; --okbg:#e6f4ea; --bad:#b3261e; --badbg:#fdecea; --acc:#0b57d0; --accbg:#e8f0fe;
+          --header:#1c2430; --headerink:#fff; --input:#fff; --ghost:#eef1f5; --logbg:#101418; --logink:#c9e1ff; }
+  [data-theme="dark"] { --bg:#10141a; --card:#1a2029; --ink:#e7ecf3; --muted:#9aa4b2; --line:#2b333e;
+          --ok:#4cc38a; --okbg:#123626; --bad:#f28b82; --badbg:#3d1d1a; --acc:#8ab4f8; --accbg:#1e2f4d;
+          --header:#0b0e13; --headerink:#e7ecf3; --input:#232b36; --ghost:#2a323d; --logbg:#0d1117; --logink:#c9e1ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, "Segoe UI", Arial, sans-serif; }
+  header { background:var(--header); color:var(--headerink); padding:14px 22px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  header h1 { margin:0; font-size:19px; }
+  header p { margin:2px 0 0; font-size:13px; opacity:.75; }
+  #themeBtn { flex:0 0 auto; }
+  main { max-width:920px; margin:0 auto; padding:18px 16px 60px; }
+  section.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:16px; }
+  h2 { margin:0 0 12px; font-size:17px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  input[type=text], input[type=url], input[type=number] { flex:1 1 280px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:14px; background:var(--input); color:var(--ink); }
+  input[type=number] { flex:0 0 90px; }
+  input[type=checkbox] { accent-color:var(--acc); }
+  button { background:var(--acc); color:#fff; border:0; border-radius:8px; padding:10px 18px; font-size:14px; cursor:pointer; }
+  button:disabled { opacity:.55; cursor:wait; }
+  button.ghost { background:var(--ghost); color:var(--ink); }
+  label.chk { display:flex; gap:6px; align-items:center; font-size:13px; color:var(--muted); }
+  pre.log { background:var(--logbg); color:var(--logink); border:1px solid var(--line); border-radius:8px; padding:12px; max-height:260px; overflow:auto; font-size:12.5px; white-space:pre-wrap; }
+  /* log background stays dark in both themes, so level colors are fixed */
+  .log .lg-err { color:#ff8a80; font-weight:600; }
+  .log .lg-warn { color:#ffca7a; }
+  .log .lg-ok { color:#7bdc9e; }
+  .log .lg-match { color:#8ab4f8; font-weight:600; }
+  .result { border:1px solid var(--line); border-left:5px solid var(--ok); border-radius:8px; padding:12px 14px; margin-top:12px; }
+  .result.err { border-left-color:var(--bad); }
+  .result a { color:var(--acc); }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12.5px; text-transform:uppercase; }
+  .score { display:inline-block; min-width:44px; text-align:center; font-weight:700; background:var(--accbg); color:var(--acc); border-radius:6px; padding:2px 6px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .skills { font-size:12.5px; color:var(--muted); }
+  .icon-link { color:var(--acc); display:inline-flex; align-items:center; padding:4px; border-radius:6px; }
+  .icon-link:hover { background:var(--accbg); }
+  .icon-link + .icon-link { margin-left:4px; }
+  .icon-link svg { width:17px; height:17px; display:block; }
+  /* Slide-in panels: all four dock LEFT beside the 60px nav rail (never under it),
+     minimized by default, one open at a time. Rail sits above (z 65 > 55). */
+  .sidebar { position:fixed; top:0; left:60px; height:100vh; width:min(480px,calc(100vw - 60px)); background:var(--card); border-right:1px solid var(--line); box-shadow:8px 0 24px rgba(0,0,0,.18); transform:translateX(-110%); transition:transform .25s ease; z-index:55; display:flex; flex-direction:column; }
+  .sidebar.open { transform:none; }
+  .sidebar .side-head { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 0; gap:8px; }
+  .sidebar .side-head h2 { margin:0; }
+  .sidebar .side-body { flex:1; display:flex; flex-direction:column; gap:8px; min-height:0; padding:12px 16px 16px; overflow-y:auto; }
+  #consoleSidebar #consoleLog { max-height:52vh; }
+  @media (max-width: 720px) {
+    .sidebar { left:0; width:100vw; }
+  }
+  body { padding-left:60px; }
+  #navRail { position:fixed; top:0; left:0; height:100vh; width:60px; background:var(--header); z-index:65; display:flex; flex-direction:column; align-items:center; padding:14px 0; gap:6px; }
+  #navRail .nav-btn { width:44px; height:44px; border:0; border-radius:12px; background:transparent; color:var(--headerink); opacity:.75; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; }
+  #navRail .nav-btn:hover { opacity:1; background:rgba(128,128,128,.18); }
+  #navRail .nav-btn svg { width:21px; height:21px; }
+  #navRail .nav-sep { width:28px; border-top:1px solid rgba(128,128,128,.35); margin:4px 0; }
+  @media (max-width: 720px) {
+    body { padding-left:0; padding-bottom:64px; }
+    #navRail { top:auto; bottom:0; left:0; height:60px; width:100vw; flex-direction:row; justify-content:center; padding:0 10px; }
+    #navRail .nav-sep { width:0; height:28px; border-top:0; border-left:1px solid rgba(128,128,128,.35); margin:0 4px; }
+  }
+  .combo-wrap { position:relative; flex:0 0 150px; }
+  .combo-wrap input { width:100%; }
+  .combo-drop { position:absolute; top:calc(100% + 4px); left:0; right:0; max-height:230px; overflow-y:auto; background:var(--card); border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 20px rgba(0,0,0,.2); z-index:70; }
+  .combo-item { padding:8px 10px; cursor:pointer; font-size:13.5px; }
+  .combo-item:hover, .combo-item.active { background:var(--accbg); }
+  .combo-code { color:var(--muted); font-size:12px; margin-left:6px; }
+  .combo-empty { padding:8px 10px; font-size:13px; color:var(--muted); }
+  .st { display:inline-block; padding:2px 10px; border-radius:20px; font-size:12px; font-weight:600; }
+  .st-ready { background:var(--okbg); color:var(--ok); }
+  .st-missing { background:var(--badbg); color:var(--bad); }
+  .st-invalid { background:var(--badbg); color:var(--bad); }
+  .st-skipped { background:var(--ghost); color:var(--muted); }
+  .setup-steps { margin:6px 0 8px 18px; padding:0; font-size:13px; }
+  .setup-steps li { margin-bottom:2px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>JobHunt — Local Job Application Assistant</h1>
+    <p>Paste a job URL → tailored PDF + tracker. Nothing is ever auto-applied.</p>
+  </div>
+  <button id="themeBtn" class="ghost" onclick="toggleTheme()" title="Toggle dark / light mode">Dark</button>
+</header>
+<nav id="navRail" aria-label="Panels (all minimized by default)">
+  <button class="nav-btn" onclick="toggleBase()" title="Edit base resume" aria-label="Edit base resume"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 2.5 13.5 4.5 5.5 12.5l-3.5 1 1-3.5z"/></svg></button>
+  <button class="nav-btn" onclick="toggleProfile()" title="LinkedIn profile" aria-label="LinkedIn profile"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="5" r="2.5"/><path d="M3 13.5c.8-2.8 2.8-4 5-4s4.2 1.2 5 4"/></svg></button>
+  <button class="nav-btn" onclick="toggleJobs()" title="Job search panel" aria-label="Job search panel"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="11" height="9" rx="1.5"/><path d="M6 4.5V3h4v1.5M2.5 8h11"/></svg></button>
+  <button class="nav-btn" onclick="toggleConsole()" title="Console" aria-label="Console"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3.5h12v9H2z"/><path d="M5 6.5 7 8l-2 1.5M8.5 10H11"/></svg></button>
+  <button class="nav-btn" onclick="toggleSetup()" title="Guided setup (API keys)" aria-label="Guided setup"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.5h12M2 10.5h12"/><circle cx="6" cy="5.5" r="1.8" fill="var(--header)"/><circle cx="10" cy="10.5" r="1.8" fill="var(--header)"/></svg></button>
+</nav>
+<main>
+  <div id="staleBanner" style="display:none; background:#fdecea; color:#b3261e; border:1px solid #f5c6c0; border-radius:12px; padding:12px 16px; margin-bottom:16px;">
+    <b>Server is outdated.</b> This page is newer than the running backend (it serves the page from disk but lacks the new API routes).
+    Restart it: press <b>Ctrl+C</b> in the terminal, then run <b>python agent.py ui</b> again.
+  </div>
+
+
+  <section class="card" id="newCard">
+    <h2>New application</h2>
+    <div class="row">
+      <input id="url" type="url" placeholder="https://www.linkedin.com/jobs/view/…" autocomplete="off">
+      <label class="chk" title="Reuse saved job + match data, skip fetch and match calls"><input id="resume" type="checkbox"> resume</label>
+      <button id="applyBtn" onclick="startApply()">Prepare application</button>
+    </div>
+    <div id="profileLine" class="muted" style="margin-top:8px"></div>
+    <div id="applyStatus" class="muted" style="margin-top:8px"></div>
+    <pre id="applyLog" class="log" style="display:none"></pre>
+    <div id="applyResult"></div>
+  </section>
+
+  <section class="card">
+    <h2>Check Gmail replies</h2>
+    <div class="row">
+      <label class="muted">Last <input id="days" type="number" value="14" min="1" max="90"> days</label>
+      <button id="mailBtn" onclick="startMail()">Check mail</button>
+    </div>
+    <div id="mailStatus" class="muted" style="margin-top:8px"></div>
+    <pre id="mailLog" class="log" style="display:none"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Tracked applications
+      <button class="ghost" onclick="loadJobs()" style="padding:6px 12px">Refresh</button>
+      <a id="sheetLink" href="#" target="_blank" title="Open Google Sheet" style="display:none; font-size:13px; margin-left:8px; vertical-align:middle">Google Sheet <span class="icon-link" style="padding:0 2px; vertical-align:-3px"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M6 2.5v11M2.5 6h11M2.5 10h11"/></svg></span></a>
+    </h2>
+    <div id="jobs"><span class="muted">Loading…</span></div>
+  </section>
+
+  <section class="card" id="editorCard" style="display:none">
+    <h2>Edit resume — <span id="editorFile" style="font-family:monospace; font-size:14px"></span></h2>
+    <div class="muted" style="margin-bottom:8px">Fix wording, add a line, repair LaTeX — then save. “Save &amp; compile” rebuilds the PDF (jobs table refreshes). “Preview” compiles without saving.</div>
+    <div class="row" style="gap:6px; margin-bottom:10px">
+      <button id="modeRaw" onclick="JobEd.setMode('raw')">Raw TeX</button>
+      <button id="modeSec" class="ghost" onclick="JobEd.setMode('sections')">Sections</button>
+    </div>
+    <textarea id="editorText" spellcheck="false" style="width:100%; min-height:380px; font:12.5px/1.55 Consolas, monospace; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink); white-space:pre"></textarea>
+    <div id="sectionsBox" style="display:none"></div>
+    <div class="row" style="margin-top:10px">
+      <button onclick="JobEd.save(false)">Save only</button>
+      <button onclick="JobEd.save(true)">Save &amp; compile PDF</button>
+      <button class="ghost" onclick="JobEd.preview()">Preview PDF</button>
+      <button class="ghost" onclick="closeEditor()">Close</button>
+      <span id="editorStatus" class="muted"></span>
+    </div>
+    <iframe id="previewFrame" title="PDF preview" style="display:none; width:100%; min-height:520px; border:1px solid var(--line); border-radius:8px; margin-top:10px"></iframe>
+    <pre id="editorLog" class="log" style="display:none; margin-top:10px"></pre>
+    <div id="editorResult"></div>
+  </section>
+
+</main>
+<aside id="baseSidebar" class="sidebar" aria-label="Base resume">
+  <div class="side-head">
+    <h2>Base resume</h2>
+    <button class="ghost" onclick="toggleBase(false)" style="padding:6px 12px" aria-label="Minimize base resume panel">×</button>
+  </div>
+  <div class="side-body">
+    <div class="muted">main.tex — starting point for every tailor. Saving keeps the previous version as <b>main.tex.bak</b>.</div>
+    <div class="row" style="gap:6px; margin-bottom:10px">
+      <button id="baseModeRaw" onclick="BaseEd.setMode('raw')">Raw TeX</button>
+      <button id="baseModeSec" class="ghost" onclick="BaseEd.setMode('sections')">Sections</button>
+    </div>
+    <textarea id="baseText" spellcheck="false" placeholder="Loading…" style="width:100%; min-height:300px; font:12.5px/1.55 Consolas, monospace; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink); white-space:pre"></textarea>
+    <div id="baseSectionsBox" style="display:none"></div>
+    <div class="row" style="margin-top:10px">
+      <button onclick="BaseEd.save(false)">Save only</button>
+      <button onclick="BaseEd.save(true)">Save &amp; preview</button>
+      <button class="ghost" onclick="BaseEd.preview()">Preview PDF</button>
+      <span id="baseStatus" class="muted"></span>
+    </div>
+    <iframe id="basePreviewFrame" title="Base resume preview" style="display:none; width:100%; min-height:420px; border:1px solid var(--line); border-radius:8px; margin-top:10px"></iframe>
+    <pre id="baseLog" class="log" style="display:none; margin-top:10px"></pre>
+    <div id="baseResult"></div>
+  </div>
+</aside>
+<aside id="profileSidebar" class="sidebar" aria-label="LinkedIn profile">
+  <div class="side-head">
+    <h2>LinkedIn profile</h2>
+    <button class="ghost" onclick="toggleProfile(false)" style="padding:6px 12px" aria-label="Minimize profile panel">×</button>
+  </div>
+  <div class="side-body">
+    <div class="muted" style="margin-bottom:8px">Paste your LinkedIn About + a <span style="font-family:monospace">## Skills</span> list once — it counts toward match % and the Skills section. <span id="profileSkills" class="muted"></span></div>
+    <textarea id="profileText" spellcheck="false" placeholder="Loading…" style="width:100%; min-height:220px; font:13px/1.55 system-ui, sans-serif; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink); white-space:pre-wrap"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button onclick="saveProfile()">Save profile</button>
+      <button class="ghost" onclick="loadTemplate()">Load template</button>
+      <span id="profileStatus" class="muted"></span>
+    </div>
+  </div>
+</aside>
+<aside id="liSidebar" class="sidebar" aria-label="LinkedIn Jobs">
+  <div class="side-head">
+    <h2>LinkedIn Jobs</h2>
+    <div style="display:flex; gap:6px; align-items:center">
+      <a class="icon-link" href="https://www.linkedin.com/jobs/" target="_blank" title="Open in new tab" aria-label="Open LinkedIn Jobs in new tab"><svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5H3.5v9h9V9.5"/><path d="M9.5 3.5h3v3"/><path d="M12.5 3.5 8 8"/></svg></a>
+      <button class="ghost" onclick="toggleJobs(false)" style="padding:6px 12px" aria-label="Minimize LinkedIn panel">×</button>
+    </div>
+  </div>
+  <div class="side-body">
+    <div class="row">
+      <input id="jsQ" type="text" placeholder="Keywords, e.g. data engineer" autocomplete="off" onkeydown="if(event.key==='Enter')startSearch()">
+      <div class="combo-wrap">
+        <input id="jsC" type="text" value="India" data-code="in" title="Job market country" autocomplete="off"
+          placeholder="Country…" oninput="filterCountries()" onfocus="showCountries()"
+          onkeydown="comboKey(event)">
+        <div id="jsCDrop" class="combo-drop" style="display:none"></div>
+      </div>
+      <button onclick="startSearch()">Search</button>
+    </div>
+    <div id="jsStatus" class="muted"></div>
+    <div id="jsResults"></div>
+    <hr style="border:0; border-top:1px solid var(--line)">
+    <div class="muted"><b>LinkedIn</b> (blocks embedding — opens in a new tab):</div>
+    <div class="row">
+      <input id="liQ" type="text" placeholder="Keywords for LinkedIn" autocomplete="off" onkeydown="if(event.key==='Enter')liSearch()">
+      <button class="ghost" onclick="liSearch()">LinkedIn ↗</button>
+    </div>
+    <div class="muted">Found something? Paste its posting URL into <b>New application</b> — or hit <b>Prepare</b> on any result above.</div>
+  </div>
+</aside>
+<aside id="consoleSidebar" class="sidebar" aria-label="Console">
+  <div class="side-head">
+    <h2>Console</h2>
+    <button class="ghost" onclick="toggleConsole(false)" style="padding:6px 12px" aria-label="Close console">×</button>
+  </div>
+  <div class="side-body">
+    <div class="muted" style="margin-bottom:8px">Run <b>doctor</b>, <b>check-mail</b>, or <b>apply</b> here. Anything else is rejected — this is not a shell. Prefix <span style="font-family:monospace">python agent.py</span> optional.</div>
+    <div class="row" style="margin-bottom:8px">
+      <button class="ghost" onclick="fillConsole('doctor')" style="padding:6px 12px">doctor</button>
+      <button class="ghost" onclick="fillConsole('check-mail')" style="padding:6px 12px">check-mail</button>
+      <button class="ghost" onclick="fillConsole('help')" style="padding:6px 12px">help</button>
+    </div>
+    <div class="row">
+      <input id="consoleIn" type="text" placeholder='doctor  ·  check-mail --days 7  ·  apply "https://…"' autocomplete="off" onkeydown="if(event.key==='Enter')runConsole()">
+      <button onclick="runConsole()">Run</button>
+    </div>
+    <pre id="consoleLog" class="log" style="display:none; margin-top:10px"></pre>
+  </div>
+</aside>
+<aside id="setupSidebar" class="sidebar" aria-label="Guided setup">
+  <div class="side-head">
+    <h2>Guided setup</h2>
+    <button class="ghost" onclick="toggleSetup(false)" style="padding:6px 12px" aria-label="Close setup">×</button>
+  </div>
+  <div class="side-body">
+    <div class="muted" style="margin-bottom:8px">One item at a time: open the key page, paste, save. Nothing is sent anywhere except this machine.</div>
+    <div id="setupBody"><span class="muted">Loading…</span></div>
+  </div>
+</aside>
+<script>
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const j = await r.json().catch(() => ({error: "bad response"}));
+  if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+}
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+function logCls(line) {
+  if (/error|traceback|failed|exception/i.test(line)) return "lg-err";
+  if (/warn(ing)?|\[WARN\]/i.test(line)) return "lg-warn";
+  if (/^\s*match \d+%/i.test(line)) return "lg-match";
+  if (/done in|\[OK\]|finished\.|logged to sheet|saved \+ pdf rebuilt|saved main\.tex/i.test(line)) return "lg-ok";
+  return "";
+}
+
+function appendLog(el, lines) {
+  if (!lines.length) return;
+  el.innerHTML += lines.map(l => logCls(l) ? `<span class="${logCls(l)}">${esc(l)}</span>` : esc(l)).join("\n") + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+
+const ICON_PDF = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 1.5h4.5L12 5v9.5H4z"/><path d="M8.5 1.5V5H12"/><path d="M6 8.5h4M6 11h4"/></svg>`;
+const ICON_APPLY = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5H3.5v9h9V9.5"/><path d="M9.5 3.5h3v3"/><path d="M12.5 3.5 8 8"/></svg>`;
+const ICON_SHEET = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M6 2.5v11M2.5 6h11M2.5 10h11"/></svg>`;
+const ICON_EDIT = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 2.5 13.5 4.5 5.5 12.5l-3.5 1 1-3.5z"/></svg>`;
+const ICON_TRASH = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11M6.5 4V2.5h3V4M4 4.5l.7 9h6.6l.7-9"/><path d="M6.8 7v4M9.2 7v4"/></svg>`;
+const ICON_RESTORE = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a5 5 0 1 1 1.5 3.6M3 8V4.5M3 8h3.5"/></svg>`;
+const ICON_LINKEDIN = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="2.5"/><text x="8" y="11.2" text-anchor="middle" font-size="7.5" font-weight="bold" fill="currentColor" stroke="none" font-family="Arial, sans-serif">in</text></svg>`;
+
+let showDeleted = false;
+
+async function loadJobs() {
+  const box = document.getElementById("jobs");
+  try {
+    const {jobs} = await api("/api/jobs?include_deleted=1");
+    const active = jobs.filter(j => !j.deleted);
+    const deleted = jobs.filter(j => j.deleted);
+    if (!active.length && !deleted.length) { box.innerHTML = '<span class="muted">No applications yet — paste a URL above.</span>'; return; }
+    box.innerHTML = (active.length ? `<table><tr><th>Company</th><th>Role</th><th>Match</th><th>Status</th><th>Links</th></tr>` +
+      active.map(j => `<tr><td><b>${esc(j.company)}</b><div class="skills">${esc((j.matching_skills||[]).join(", "))}</div></td>
+        <td>${esc(j.title)}${(j.missing_skills||[]).length ? `<div class="skills">missing: ${esc(j.missing_skills.join(", "))}</div>` : ""}</td>
+        <td>${j.match_score == null ? "—" : `<span class="score">${j.match_score}%</span>`}</td>
+        <td title="As last logged locally; the Sheet may be newer after Gmail updates">${j.status ? esc(j.status) : "—"}</td>
+        <td style="white-space:nowrap"><button class="icon-link" style="background:none;border:0;cursor:pointer" onclick="openEditor('${esc(j.dir)}')" title="Edit resume .tex" aria-label="Edit resume">${ICON_EDIT}</button>${j.pdf_url ? `<a class="icon-link" href="${j.pdf_url}" target="_blank" title="Open tailored PDF" aria-label="Open tailored PDF">${ICON_PDF}</a>` : '<span class="muted" title="No PDF produced">—</span>'}${j.apply_link ? `<a class="icon-link" href="${esc(j.apply_link)}" target="_blank" title="Apply manually (opens job posting)" aria-label="Apply manually">${ICON_APPLY}</a>` : ""}<button class="icon-link" style="background:none;border:0;cursor:pointer" onclick="deleteJob('${esc(j.dir)}','${esc(j.company)}')" title="Hide (soft delete — restorable)" aria-label="Hide application">${ICON_TRASH}</button></td></tr>`).join("") + `</table>` : '<span class="muted">No active applications.</span>')
+      + (deleted.length ? `<div style="margin-top:10px"><a href="#" onclick="showDeleted=!showDeleted;loadJobs();return false;" class="muted">${showDeleted ? "Hide" : "Show"} hidden (${deleted.length})</a>
+        ${showDeleted ? `<table style="margin-top:6px; opacity:.75"><tr><th>Company</th><th>Role</th><th>Status</th><th></th></tr>` +
+          deleted.map(j => `<tr><td>${esc(j.company)}</td><td>${esc(j.title)}</td><td>${j.status ? esc(j.status) : "—"}</td>
+            <td><button class="icon-link" style="background:none;border:0;cursor:pointer" onclick="restoreJob('${esc(j.dir)}')" title="Restore" aria-label="Restore application">${ICON_RESTORE}</button></td></tr>`).join("") + `</table>` : ""}</div>` : "");
+  } catch (e) { box.innerHTML = `<span class="muted">Could not load jobs: ${esc(e.message)}</span>`; }
+}
+
+async function deleteJob(dir, company) {
+  if (!confirm(`Hide "${company}" from Tracked applications?\n\nNothing is erased — restore anytime via “Show hidden”. Your Google Sheet row is untouched.`)) return;
+  try {
+    await api("/api/jobs/delete", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({dir})});
+    loadJobs();
+  } catch (e) { alert("Delete failed: " + e.message); }
+}
+
+async function restoreJob(dir) {
+  try {
+    await api("/api/jobs/restore", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({dir})});
+    loadJobs();
+  } catch (e) { alert("Restore failed: " + e.message); }
+}
+
+async function pollTask(tid, logEl, statusEl, onDone) {
+  let seen = 0;
+  logEl.style.display = "block";
+  while (true) {
+    await new Promise(r => setTimeout(r, 1500));
+    let t;
+    try { t = await api("/api/tasks/" + tid); }
+    catch (e) { statusEl.textContent = "Connection lost: " + e.message; return; }
+    const fresh = t.log.slice(seen); seen = t.log.length;
+    appendLog(logEl, fresh);
+    if (t.status === "running") { statusEl.textContent = "Working… (" + t.log.length + " lines)"; continue; }
+    statusEl.textContent = t.status === "done" ? "Finished." : "Failed.";
+    onDone(t);
+    return;
+  }
+}
+
+async function startApply() {
+  const url = document.getElementById("url").value.trim();
+  const resume = document.getElementById("resume").checked;
+  const btn = document.getElementById("applyBtn");
+  document.getElementById("applyResult").innerHTML = "";
+  document.getElementById("applyLog").textContent = "";
+  if (!url) { document.getElementById("applyStatus").textContent = "Paste a job URL first."; return; }
+  btn.disabled = true;
+  try {
+    const {task_id} = await api("/api/apply", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({url, resume})});
+    document.getElementById("applyStatus").textContent = "Working… (a Google consent tab may open on first run)";
+    await pollTask(task_id, document.getElementById("applyLog"), document.getElementById("applyStatus"), t => {
+      const box = document.getElementById("applyResult");
+      if (t.status !== "done") { box.innerHTML = `<div class="result err"><b>${esc(failDetail(t).split("\n")[0])}</b>${t.result && t.result.trace ? `<pre class="log" style="margin-top:8px">${esc(t.result.trace.join("\n"))}</pre>` : ""}</div>`; return; }
+      const j = (t.result||{}).job;
+      if (!j) { box.innerHTML = `<div class="result err">Finished but no job data found (exit ${(t.result||{}).exit_code}). Check the log above.</div>`; return; }
+      box.innerHTML = `<div class="result"><b>${esc(j.company)}</b> — ${esc(j.title)}
+        ${j.match_score == null ? "" : ` <span class="score">${j.match_score}%</span>`}<br>
+        ${j.pdf_url ? `<a href="${j.pdf_url}" target="_blank"><b>Open tailored PDF</b></a>` : "<b>No PDF produced</b> — see log."}
+        ${j.apply_link ? ` · <a href="${esc(j.apply_link)}" target="_blank">Apply manually here</a>` : ""}
+        <div class="muted">Logged to your Google Sheet as “Ready to Apply”.</div></div>`;
+      loadJobs();
+    });
+  } catch (e) { document.getElementById("applyStatus").textContent = "Error: " + e.message; }
+  finally { btn.disabled = false; }
+}
+
+async function startMail() {
+  const days = document.getElementById("days").value || 14;
+  const btn = document.getElementById("mailBtn");
+  document.getElementById("mailLog").textContent = "";
+  btn.disabled = true;
+  try {
+    const {task_id} = await api("/api/check-mail", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({days: Number(days)})});
+    document.getElementById("mailStatus").textContent = "Scanning Gmail…";
+    await pollTask(task_id, document.getElementById("mailLog"), document.getElementById("mailStatus"), () => loadJobs());
+  } catch (e) { document.getElementById("mailStatus").textContent = "Error: " + e.message; }
+  finally { btn.disabled = false; }
+}
+
+async function loadSheet() {
+  try {
+    const {sheet_url} = await api("/api/sheet");
+    if (sheet_url) {
+      const a = document.getElementById("sheetLink");
+      a.href = sheet_url; a.style.display = "inline";
+    }
+  } catch (e) { /* sheet not configured — link stays hidden */ }
+}
+
+/* Shared resume editor (Raw TeX + Sections + preview). One factory, two
+   instances: JobEd drives the main editor card, BaseEd the base sidebar.
+   Same features everywhere — no parallel implementations to drift apart. */
+function makeEditor(name, E, load, persist, afterSave) {
+  const S = {source: null, mode: "raw", parsed: null};
+  const $ = id => document.getElementById(id);
+
+  function paint() {
+    $(E.modeRaw).className = S.mode === "raw" ? "" : "ghost";
+    $(E.modeSec).className = S.mode === "sections" ? "" : "ghost";
+    $(E.text).style.display = S.mode === "raw" ? "block" : "none";
+    $(E.sectionsBox).style.display = S.mode === "sections" ? "block" : "none";
+  }
+
+  async function open(src) {
+    S.source = src; S.mode = "raw"; S.parsed = null;
+    if (E.card) $(E.card).style.display = "block";
+    if (E.file) $(E.file).textContent = src.label || "…";
+    $(E.text).value = "Loading…";
+    $(E.result).innerHTML = "";
+    $(E.log).style.display = "none";
+    $(E.frame).style.display = "none";
+    $(E.status).textContent = "";
+    paint();
+    try {
+      const t = await load(src);
+      if (E.file) $(E.file).textContent = t.file || src.label || "";
+      $(E.text).value = t.content;
+    } catch (e) {
+      $(E.text).value = "";
+      $(E.status).textContent = "Error: " + e.message;
+    }
+    if (E.card) $(E.card).scrollIntoView({behavior: "smooth", block: "start"});
+  }
+
+  function close() {
+    if (E.card) $(E.card).style.display = "none";
+    S.source = null; S.parsed = null;
+  }
+
+  async function setMode(m) {
+    if (!S.source) return;
+    if (m === "sections") {
+      $(E.status).textContent = "Parsing sections…";
+      try {
+        S.parsed = await api("/api/parse", {method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({content: $(E.text).value})});
+      } catch (e) {
+        $(E.status).textContent = "Section mode unavailable: " + e.message;
+        return;
+      }
+      $(E.status).textContent = "";
+    }
+    S.mode = m;
+    paint();
+    if (m === "sections") render();
+  }
+
+  function render() {
+    $(E.sectionsBox).innerHTML = S.parsed.sections.map((s, i) => {
+      const isPre = !s.title;
+      const fmt = s.format || "latex";
+      return `<div class="result" data-kind="${isPre ? "preamble" : "section"}" style="margin-bottom:10px">
+        <div class="row" style="gap:6px; margin-bottom:6px">
+          ${isPre ? `<b>Top — name &amp; contact</b><span class="muted">(before first \\section)</span>`
+                  : `<input data-title type="text" value="${esc(s.title)}" placeholder="Section title" style="flex:1 1 200px">
+                     <label class="chk" title="\\section* (unnumbered) vs \\section"><input data-star type="checkbox" ${s.starred ? "checked" : ""}> *</label>
+                     ${i > 1 ? `<button class="ghost" onclick="${name}.secMove(${i},-1)" style="padding:4px 10px" title="Move up">↑</button>` : ""}
+                     <button class="ghost" onclick="${name}.secMove(${i},1)" style="padding:4px 10px" title="Move down">↓</button>
+                     <button class="ghost" onclick="${name}.secDel(${i})" style="padding:4px 10px" title="Delete section">✕</button>`}
+          <select data-format title="How this box is converted to LaTeX on save/preview" style="padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink)">${fmtOptions(fmt)}</select>
+        </div>
+        <textarea data-body rows="6" style="width:100%; font:12.5px/1.55 Consolas, monospace; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink); white-space:pre">${esc(s.body)}</textarea>
+        <div class="muted" style="font-size:12px; margin-top:4px">Markdown: <b>**bold**</b> <i>*italic*</i> <span style="font-family:monospace">\`code\`</span> - bullets, 1. numbered, [text](url) · Plain: line breaks kept · LaTeX: used verbatim.</div>
+      </div>`;
+    }).join("") + `<button class="ghost" onclick="${name}.secAdd()">+ Add section</button>`;
+  }
+
+  function collect() {
+    const cards = $(E.sectionsBox).querySelectorAll(".result");
+    S.parsed.sections = [...cards].map(card => ({
+      title: card.dataset.kind === "preamble" ? null : (card.querySelector("[data-title]").value || "").trim() || null,
+      starred: card.dataset.kind === "preamble" ? false : card.querySelector("[data-star]").checked,
+      body: card.querySelector("[data-body]").value,
+      format: card.querySelector("[data-format]").value,
+    }));
+  }
+
+  function secMove(i, d) {
+    collect();
+    const j = i + d;
+    const ss = S.parsed.sections;
+    if (j < 1 || j >= ss.length) return;  // preamble stays first
+    [ss[i], ss[j]] = [ss[j], ss[i]];
+    render();
+  }
+
+  function secDel(i) {
+    collect();
+    if (S.parsed.sections[i].title === null) return;
+    if (!confirm("Delete this section?")) return;
+    S.parsed.sections.splice(i, 1);
+    render();
+  }
+
+  function secAdd() {
+    collect();
+    S.parsed.sections.push({title: "New Section", starred: true, body: "", format: "markdown"});
+    render();
+    $(E.sectionsBox).lastChild.scrollIntoView({behavior: "smooth", block: "nearest"});
+  }
+
+  async function content() {
+    if (S.mode === "raw" || !S.parsed) return $(E.text).value;
+    collect();
+    const res = await api("/api/build", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({head: S.parsed.head, sections: S.parsed.sections, tail: S.parsed.tail})});
+    return res.content;
+  }
+
+  async function save(compile) {
+    if (!S.source) return;
+    const status = $(E.status), log = $(E.log), box = $(E.result);
+    status.textContent = compile ? "Saving & compiling…" : "Saving…";
+    log.style.display = "none"; box.innerHTML = "";
+    let text;
+    try { text = await content(); }
+    catch (e) { status.textContent = "Error: " + e.message; return; }
+    let res;
+    try { res = await persist(S.source, text, compile); }
+    catch (e) { status.textContent = "Error: " + e.message; return; }
+    afterSave(res, compile, {status, log, box, frame: $(E.frame)});
+  }
+
+  async function preview() {
+    const status = $(E.status), frame = $(E.frame);
+    frame.style.display = "none";
+    status.textContent = "Compiling preview…";
+    let text;
+    try { text = await content(); }
+    catch (e) { status.textContent = "Error: " + e.message; return; }
+    let res;
+    try {
+      res = await api("/api/preview", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({content: text})});
+    } catch (e) { status.textContent = "Error: " + e.message; return; }
+    if (!res.ok) {
+      status.textContent = "Preview failed — fix the LaTeX and retry.";
+      const log = $(E.log);
+      $(E.result).innerHTML =
+        `<div class="result err"><b>tectonic error:</b> ${esc(res.error || "unknown")}</div>`;
+      if (res.compile_log) { log.style.display = "block"; log.textContent = res.compile_log; }
+      return;
+    }
+    frame.src = res.pdf_url + "?t=" + Date.now();
+    frame.style.display = "block";
+    status.textContent = "Preview below — includes unsaved changes.";
+  }
+
+  return {open, close, setMode, secMove, secDel, secAdd, save, preview};
+}
+
+const JobEd = makeEditor("JobEd",
+  {card: "editorCard", file: "editorFile", text: "editorText", sectionsBox: "sectionsBox",
+   modeRaw: "modeRaw", modeSec: "modeSec", status: "editorStatus", log: "editorLog",
+   result: "editorResult", frame: "previewFrame"},
+  async (src) => {
+    const t = await api("/api/tex?dir=" + encodeURIComponent(src.dir));
+    return {file: src.dir + "/" + t.file, content: t.content};
+  },
+  async (src, text, compile) => api("/api/tex", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({dir: src.dir, content: text, compile})}),
+  (res, compile, ui) => {
+    const warn = (res.warnings && res.warnings.length)
+      ? `<div class="result err" style="border-left-color:#b7791f"><b>Honesty check:</b> not in your base resume/profile — ${esc(res.warnings.join(", "))}. Remove or verify before submitting.</div>` : "";
+    if (!compile || res.compiled) {
+      ui.status.textContent = res.compiled ? "Saved + PDF rebuilt." : "Saved (no compile).";
+      if (res.pdf_url) ui.box.innerHTML = `<div class="result"><a href="${res.pdf_url}" target="_blank"><b>Open rebuilt PDF</b></a></div>`;
+      ui.box.innerHTML += warn;
+      loadJobs();
+      return;
+    }
+    ui.status.textContent = "Saved, but compile failed — fix the LaTeX below and retry.";
+    ui.box.innerHTML = `<div class="result err"><b>tectonic error:</b> ${esc(res.error || "unknown")}</div>` + warn;
+    if (res.compile_log) { ui.log.style.display = "block"; ui.log.textContent = res.compile_log; }
+  });
+
+const BaseEd = makeEditor("BaseEd",
+  {card: null, file: null, text: "baseText", sectionsBox: "baseSectionsBox",
+   modeRaw: "baseModeRaw", modeSec: "baseModeSec", status: "baseStatus", log: "baseLog",
+   result: "baseResult", frame: "basePreviewFrame"},
+  async () => ({file: "main.tex", content: (await api("/api/base")).content}),
+  async (src, text) => api("/api/base", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({content: text})}),
+  (res, compile, ui) => {
+    ui.status.textContent = "Saved main.tex (backup: main.tex.bak).";
+    if (compile) { ui.status.textContent += " Compiling preview…"; BaseEd.preview(); }
+  });
+
+async function openEditor(dir) { await JobEd.open({kind: "job", dir, label: dir + "/…"}); }
+function closeEditor() { JobEd.close(); }
+
+function fmtOptions(current) {
+  return ["markdown", "plain", "latex"].map(f =>
+    `<option value="${f}"${f === current ? " selected" : ""}>${f === "markdown" ? "Markdown" : f === "plain" ? "Plain text" : "LaTeX"}</option>`).join("");
+}
+
+
+
+const SIDEBARS = ["liSidebar", "baseSidebar", "profileSidebar", "consoleSidebar", "setupSidebar"];
+
+function closeSidebars(except) {
+  SIDEBARS.forEach(id => { if (id !== except) document.getElementById(id).classList.remove("open"); });
+}
+
+function toggleConsole(force) {
+  const s = document.getElementById("consoleSidebar");
+  const show = force === undefined ? !s.classList.contains("open") : !!force;
+  if (show) closeSidebars("consoleSidebar");
+  s.classList.toggle("open", show);
+  if (show) { const i = document.getElementById("consoleIn"); if (i) i.focus(); }
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeSidebars(null);
+});
+
+function toggleJobs(force) {
+  const s = document.getElementById("liSidebar");
+  const show = force === undefined ? !s.classList.contains("open") : !!force;
+  if (show) closeSidebars("liSidebar");
+  s.classList.toggle("open", show);
+  if (show) { const i = document.getElementById("jsQ"); if (i) i.focus(); }
+}
+
+let baseOpened = false;
+function toggleBase(force) {
+  const s = document.getElementById("baseSidebar");
+  const show = force === undefined ? !s.classList.contains("open") : !!force;
+  if (show) closeSidebars("baseSidebar");
+  s.classList.toggle("open", show);
+  if (show && !baseOpened) { baseOpened = true; BaseEd.open({kind: "base", label: "main.tex"}); }
+}
+
+function toggleProfile(force) {
+  const s = document.getElementById("profileSidebar");
+  const show = force === undefined ? !s.classList.contains("open") : !!force;
+  if (show) closeSidebars("profileSidebar");
+  s.classList.toggle("open", show);
+}
+
+function toggleSetup(force) {
+  const s = document.getElementById("setupSidebar");
+  const show = force === undefined ? !s.classList.contains("open") : !!force;
+  if (show) closeSidebars("setupSidebar");
+  s.classList.toggle("open", show);
+  if (show) loadSetup();
+}
+
+const ST_LABEL = {ready: "Ready", missing: "Missing", invalid: "Check", skipped: "Skipped"};
+
+async function loadSetup() {
+  const box = document.getElementById("setupBody");
+  box.innerHTML = '<span class="muted">Loading…</span>';
+  let items;
+  try {
+    items = (await api("/api/setup/state")).items;
+  } catch (e) { box.innerHTML = `<span class="muted">Could not load: ${esc(e.message)}</span>`; return; }
+  box.innerHTML = items.map(it => {
+    const steps = (it.steps || []).map((s, i) => `<li>${esc(s)}</li>`).join("");
+    const open = it.open_url ? `<a class="icon-link" href="${esc(it.open_url)}" target="_blank" title="${esc(it.open_label || "Open key page")}" style="font-size:13px">${esc(it.open_label || "Open key page")} ↗</a>` : "";
+    let action = "";
+    if (it.kind === "env") {
+      action = `<div class="row" style="margin-top:6px">
+        <input id="setup-in-${esc(it.key)}" type="text" placeholder="Paste value…" autocomplete="off" autocapitalize="off" spellcheck="false"
+          onkeydown="if(event.key==='Enter')saveSetupValue('${esc(it.key)}')">
+        <button onclick="saveSetupValue('${esc(it.key)}')" style="padding:8px 14px">Save</button>
+        <span id="setup-msg-${esc(it.key)}" class="muted"></span></div>`;
+    } else if (it.key === "profile.md") {
+      action = `<div class="row" style="margin-top:6px"><button class="ghost" onclick="setupUseTemplate()" style="padding:8px 14px">Create from template</button>
+        <span id="setup-msg-profile" class="muted"></span></div>`;
+    } else if (it.key === "main.tex") {
+      action = `<div class="row" style="margin-top:6px">
+        <input id="setup-file-main" type="file" accept=".tex,.txt" style="flex:1 1 200px">
+        <button onclick="uploadResume()" style="padding:8px 14px">Upload</button>
+        <span id="setup-msg-main" class="muted"></span></div>`;
+    }
+    return `<div class="result" style="margin-bottom:10px">
+      <div class="row" style="gap:6px; margin-bottom:4px"><b>${esc(it.title)}</b>
+        <span class="st st-${esc(it.status)}">${esc(ST_LABEL[it.status] || it.status)}</span></div>
+      <div class="muted" style="font-size:13px">${esc(it.why)}${it.optional ? " (optional)" : ""}</div>
+      ${steps ? `<ol class="setup-steps">${steps}</ol>` : ""}
+      <div class="row" style="gap:6px; margin:4px 0">${open}<span class="muted" style="font-size:12.5px">${esc(it.detail)}</span></div>
+      ${action}</div>`;
+  }).join("");
+}
+
+async function saveSetupValue(key) {
+  const msg = document.getElementById("setup-msg-" + key);
+  const val = document.getElementById("setup-in-" + key).value;
+  msg.textContent = "Saving…";
+  try {
+    const res = await api("/api/setup/save", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({key, value: val})});
+    msg.textContent = res.detail || "Saved.";
+    document.getElementById("setup-in-" + key).value = "";
+    loadSetup();
+  } catch (e) { msg.textContent = "Error: " + e.message; }
+}
+
+async function setupUseTemplate() {
+  const msg = document.getElementById("setup-msg-profile");
+  msg.textContent = "Working…";
+  try {
+    const res = await api("/api/setup/profile-template", {method: "POST"});
+    msg.textContent = res.detail || "Done.";
+    loadSetup();
+  } catch (e) { msg.textContent = "Error: " + e.message; }
+}
+
+async function uploadResume() {
+  const msg = document.getElementById("setup-msg-main");
+  const picker = document.getElementById("setup-file-main");
+  const file = picker && picker.files && picker.files[0];
+  if (!file) { msg.textContent = "Choose a .tex file first."; return; }
+  const state = await api("/api/setup/state").catch(() => ({items: []}));
+  const current = (state.items || []).find(i => i.key === "main.tex");
+  if (current && current.status === "ready" &&
+      !confirm("main.tex already exists — uploading will REPLACE it (a backup is kept as main.tex.bak). Continue?")) {
+    msg.textContent = "Cancelled — existing file kept.";
+    return;
+  }
+  msg.textContent = "Reading…";
+  const content = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ""));
+    r.onerror = () => reject(new Error("Couldn't read file."));
+    r.readAsText(file);
+  }).catch(e => { msg.textContent = "Error: " + e.message; return null; });
+  if (content === null) return;
+  msg.textContent = "Uploading…";
+  try {
+    const res = await api("/api/setup/upload-resume", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({content})});
+    msg.textContent = `Saved main.tex${res.replaced ? " (previous kept as main.tex.bak)" : ""}.`;
+    picker.value = "";
+    loadSetup();
+  } catch (e) { msg.textContent = "Error: " + e.message; }
+}
+
+function liSearch() {
+  const q = document.getElementById("liQ").value.trim();
+  window.open("https://www.linkedin.com/jobs/search/?keywords=" + encodeURIComponent(q || "software engineer"), "_blank");
+}
+
+// [name, code] ascending by name. Codes go to the API; users only see names.
+// Unknown codes degrade gracefully (API falls back to its default market).
+const COUNTRIES = [
+  ["Afghanistan","af"],["Albania","al"],["Algeria","dz"],["Argentina","ar"],["Armenia","am"],
+  ["Australia","au"],["Austria","at"],["Azerbaijan","az"],["Bahamas","bs"],["Bahrain","bh"],
+  ["Bangladesh","bd"],["Belarus","by"],["Belgium","be"],["Bolivia","bo"],["Bosnia and Herzegovina","ba"],
+  ["Brazil","br"],["Bulgaria","bg"],["Cambodia","kh"],["Cameroon","cm"],["Canada","ca"],
+  ["Chile","cl"],["Colombia","co"],["Costa Rica","cr"],["Croatia","hr"],["Cyprus","cy"],
+  ["Czechia","cz"],["Denmark","dk"],["Dominican Republic","do"],["Ecuador","ec"],["Egypt","eg"],
+  ["El Salvador","sv"],["Estonia","ee"],["Ethiopia","et"],["Fiji","fj"],["Finland","fi"],
+  ["France","fr"],["Georgia","ge"],["Germany","de"],["Ghana","gh"],["Greece","gr"],
+  ["Guatemala","gt"],["Honduras","hn"],["Hong Kong","hk"],["Hungary","hu"],["Iceland","is"],
+  ["India","in"],["Indonesia","id"],["Ireland","ie"],["Israel","il"],["Italy","it"],
+  ["Jamaica","jm"],["Japan","jp"],["Jordan","jo"],["Kazakhstan","kz"],["Kenya","ke"],
+  ["Kuwait","kw"],["Kyrgyzstan","kg"],["Laos","la"],["Latvia","lv"],["Lebanon","lb"],
+  ["Lithuania","lt"],["Luxembourg","lu"],["Malaysia","my"],["Malta","mt"],["Mauritius","mu"],
+  ["Mexico","mx"],["Moldova","md"],["Mongolia","mn"],["Montenegro","me"],["Morocco","ma"],
+  ["Myanmar","mm"],["Nepal","np"],["Netherlands","nl"],["New Zealand","nz"],["Nicaragua","ni"],
+  ["Nigeria","ng"],["North Macedonia","mk"],["Norway","no"],["Oman","om"],["Pakistan","pk"],
+  ["Panama","pa"],["Papua New Guinea","pg"],["Paraguay","py"],["Peru","pe"],["Philippines","ph"],
+  ["Poland","pl"],["Portugal","pt"],["Puerto Rico","pr"],["Qatar","qa"],["Romania","ro"],
+  ["Russia","ru"],["Saudi Arabia","sa"],["Senegal","sn"],["Serbia","rs"],["Singapore","sg"],
+  ["Slovakia","sk"],["Slovenia","si"],["South Africa","za"],["South Korea","kr"],["Spain","es"],
+  ["Sri Lanka","lk"],["Sweden","se"],["Switzerland","ch"],["Taiwan","tw"],["Tanzania","tz"],
+  ["Thailand","th"],["Trinidad and Tobago","tt"],["Tunisia","tn"],["Turkey","tr"],["Uganda","ug"],
+  ["Ukraine","ua"],["United Arab Emirates","ae"],["United Kingdom","gb"],["United States","us"],
+  ["Uruguay","uy"],["Uzbekistan","uz"],["Venezuela","ve"],["Vietnam","vn"],["Zambia","zm"],
+  ["Zimbabwe","zw"]
+];
+
+function countryCode() {
+  const el = document.getElementById("jsC");
+  const typed = el.value.trim().toLowerCase();
+  const exact = COUNTRIES.find(([n]) => n.toLowerCase() === typed);
+  if (exact) { el.dataset.code = exact[1]; return exact[1]; }
+  return el.dataset.code || "in";
+}
+
+function renderCountries(list) {
+  const drop = document.getElementById("jsCDrop");
+  drop.innerHTML = list.length
+    ? list.map(([n, c]) => `<div class="combo-item" data-code="${c}" onclick="pickCountry('${c}')">${esc(n)}<span class="combo-code">${esc(c)}</span></div>`).join("")
+    : `<div class="combo-empty">No match — pick from the list.</div>`;
+  drop.style.display = "block";
+}
+
+function showCountries() {
+  renderCountries(COUNTRIES);
+}
+
+function filterCountries() {
+  const q = document.getElementById("jsC").value.trim().toLowerCase();
+  renderCountries(COUNTRIES.filter(([n, c]) => n.toLowerCase().includes(q) || c === q));
+}
+
+function pickCountry(code) {
+  const found = COUNTRIES.find(([, c]) => c === code);
+  const el = document.getElementById("jsC");
+  el.value = found ? found[0] : code;
+  el.dataset.code = code;
+  document.getElementById("jsCDrop").style.display = "none";
+}
+
+function comboKey(e) {
+  const drop = document.getElementById("jsCDrop");
+  const open = drop.style.display !== "none";
+  if (e.key === "Escape" && open) { drop.style.display = "none"; e.stopPropagation(); }
+  if (e.key === "Enter") {
+    const first = drop.querySelector(".combo-item");
+    if (open && first) pickCountry(first.dataset.code);
+    drop.style.display = "none";
+    startSearch();
+  }
+}
+document.addEventListener("click", e => {
+  const drop = document.getElementById("jsCDrop");
+  if (drop && drop.style.display !== "none" && !e.target.closest(".combo-wrap")) drop.style.display = "none";
+});
+
+async function startSearch() {
+  const q = document.getElementById("jsQ").value.trim();
+  const c = countryCode();
+  const status = document.getElementById("jsStatus");
+  const box = document.getElementById("jsResults");
+  box.innerHTML = ""; status.textContent = q ? "Searching…" : "Type keywords first.";
+  if (!q) return;
+  let res;
+  try {
+    res = await api("/api/search", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({query: q, country: c})});
+  } catch (e) { status.textContent = "Error: " + e.message; return; }
+  if (!res.jobs.length) { status.textContent = "No results — try different keywords or country."; return; }
+  status.textContent = res.jobs.length + " result(s). Prepare runs the full tailor + PDF + tracker flow.";
+  box.innerHTML = res.jobs.map((j, i) => `<div class="result" style="border-left-color:var(--acc)">
+      <b>${esc(j.title)}</b> @ ${esc(j.company)}
+      <div class="skills">${esc([j.location, j.posted, j.salary].filter(Boolean).join(" · "))}</div>
+      <div class="skills">${esc(j.snippet)}…</div>
+      <div class="row" style="margin-top:6px"><button id="prep-${i}" onclick="prepareJob('${esc(j.job_id)}', ${i})" style="padding:6px 12px">Prepare</button>
+      <a class="icon-link" href="${esc(j.linkedin_url)}" target="_blank" title="${j.linkedin_direct ? "Open LinkedIn posting (new tab)" : "Find this role on LinkedIn (new tab)"}" aria-label="Open on LinkedIn">${ICON_LINKEDIN}</a>
+      <span id="prepstatus-${i}" class="muted"></span></div></div>`).join("");
+}
+
+async function prepareJob(jobId, i) {
+  const btn = document.getElementById("prep-" + i);
+  const status = document.getElementById("prepstatus-" + i);
+  btn.disabled = true; status.textContent = "Working… (minimize panel freely)";
+  let tid;
+  try {
+    tid = (await api("/api/apply", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({job_id: jobId})})).task_id;
+  } catch (e) { status.textContent = "Error: " + e.message; btn.disabled = false; return; }
+  let lastLog = [];
+  while (true) {
+    await new Promise(r => setTimeout(r, 2000));
+    let t;
+    try { t = await api("/api/tasks/" + tid); }
+    catch (e) { status.textContent = "Connection lost."; btn.disabled = false; return; }
+    lastLog = t.log || [];
+    if (t.status === "running") { status.textContent = `Working… (${lastLog.length} lines)`; continue; }
+    btn.disabled = false;
+    if (t.status !== "done") { status.textContent = "Failed: " + (((t.result || {}).error) || "unknown"); return; }
+    const code = (t.result || {}).exit_code;
+    const j = (t.result || {}).job;
+    if (j && j.pdf_url) {
+      status.innerHTML = `<a href="${j.pdf_url}" target="_blank"><b>Open PDF</b></a> · match ${j.match_score}%`;
+      loadJobs();
+      return;
+    }
+    status.innerHTML = code
+      ? `Run ended (exit ${code}) with no PDF. Last log lines:<pre class="log" style="max-height:150px;margin-top:6px">${esc(lastLog.slice(-10).join("\n") || "see output/ui_tasks.log")}</pre>`
+      : "Done (no PDF).";
+    loadJobs();
+    return;
+  }
+}
+
+function fillConsole(cmd) {
+  const el = document.getElementById("consoleIn");
+  el.value = cmd; el.focus();
+}
+
+function clog(text) {
+  const log = document.getElementById("consoleLog");
+  log.style.display = "block";
+  log.textContent += text + "\n";
+  log.scrollTop = log.scrollHeight;
+}
+
+async function runConsole() {
+  const el = document.getElementById("consoleIn");
+  const cmd = el.value.trim();
+  if (!cmd) return;
+  clog("$ " + cmd);
+  el.value = "";
+  let res;
+  try {
+    res = await api("/api/console", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({command: cmd})});
+  } catch (e) { clog("Error: " + e.message); return; }
+  if (res.error) { clog("Error: " + res.error); return; }
+  if (res.output) { clog(res.output); return; }
+  if (res.task_id) {
+    const log = document.getElementById("consoleLog");
+    let shown = 0;
+    while (true) {
+      await new Promise(r => setTimeout(r, 1500));
+      let t;
+      try { t = await api("/api/tasks/" + res.task_id); }
+      catch (e) { clog("Connection lost: " + e.message); return; }
+      const fresh = t.log.slice(shown);
+      shown = t.log.length;
+      appendLog(log, fresh);
+      if (t.status !== "running") {
+        if (t.status !== "done") clog(failDetail(t));
+        else if ((t.result || {}).exit_code) clog("(exit " + t.result.exit_code + ")");
+        if (cmd.startsWith("check-mail") || cmd.includes("apply")) loadJobs();
+        return;
+      }
+    }
+  }
+}
+
+async function checkVersion() {
+  try {
+    const {version} = await api("/api/version");
+    if (version !== 10) throw new Error("mismatch");
+  } catch (e) {
+    document.getElementById("staleBanner").style.display = "block";
+  }
+}
+
+function failDetail(t) {
+  const r = t.result || {};
+  let s = "Failed: " + (r.error || "unknown");
+  if (r.trace && r.trace.length) s += "\n" + r.trace.join("\n");
+  return s;
+}
+
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("jh-theme", t); } catch (e) { /* private mode */ }
+  const b = document.getElementById("themeBtn");
+  if (b) b.textContent = t === "dark" ? "Light" : "Dark";
+}
+function toggleTheme() {
+  setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+}
+(function initTheme() {
+  let t = null;
+  try { t = localStorage.getItem("jh-theme"); } catch (e) { /* private mode */ }
+  if (!t && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches) t = "dark";
+  setTheme(t || "light");
+})();
+
+async function loadProfile() {
+  try {
+    const p = await api("/api/profile");
+    const el = document.getElementById("profileLine");
+    if (p.source === "none" || !p.total) {
+      el.innerHTML = `LinkedIn profile: not linked — copy <span style="font-family:monospace">profile.md.example</span> to <span style="font-family:monospace">profile.md</span> and paste your Skills to boost matching.`;
+    } else {
+      el.innerHTML = `LinkedIn profile (${esc(p.source)}): <b>${p.total} skill(s)</b>${p.skills.length ? ` — ${esc(p.skills.join(", "))}${p.total > p.skills.length ? ", …" : ""}` : ""} merged into match % + Skills section.`;
+    }
+  } catch (e) { /* leave blank */ }
+}
+
+async function loadProfileFile() {
+  const box = document.getElementById("profileText");
+  const skills = document.getElementById("profileSkills");
+  try {
+    const p = await api("/api/profile-file");
+    box.value = p.content || "";
+    box.placeholder = p.exists ? "" : "No profile yet — hit “Load template”, fill your Skills, Save.";
+  } catch (e) { box.placeholder = "Could not load profile: " + e.message; }
+  try {
+    const s = await api("/api/profile");
+    skills.textContent = s.total ? `Currently linked: ${s.total} skill(s).` : "";
+  } catch (e) { /* leave blank */ }
+}
+
+async function loadTemplate() {
+  if (document.getElementById("profileText").value.trim() &&
+      !confirm("Replace current text with the template?")) return;
+  try {
+    const t = await api("/api/profile-template");
+    document.getElementById("profileText").value = t.content;
+    document.getElementById("profileStatus").textContent = "Template loaded — fill it in, then Save.";
+  } catch (e) { document.getElementById("profileStatus").textContent = "Error: " + e.message; }
+}
+
+async function saveProfile() {
+  const status = document.getElementById("profileStatus");
+  status.textContent = "Saving…";
+  try {
+    const res = await api("/api/profile-file", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({content: document.getElementById("profileText").value})});
+    status.textContent = `Saved ${res.file}.` + (res.skills.length ? ` ${res.skills.length} skill(s) detected: ${res.skills.slice(0, 8).join(", ")}${res.skills.length > 8 ? ", …" : ""}` : " No ## Skills section detected — matching uses text only.");
+    loadProfile();
+  } catch (e) { status.textContent = "Error: " + e.message; }
+}
+
+loadJobs(); loadSheet(); loadProfile(); loadProfileFile(); checkVersion();
+</script>
+</body>
+</html>

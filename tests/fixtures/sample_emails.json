@@ -1,0 +1,23 @@
+[
+  {
+    "id": "m1",
+    "company": "Acme Corp",
+    "subject": "Update on your application",
+    "date": "2026-09-20",
+    "body": "Hi, thanks for applying. After review we will not be moving forward at this time."
+  },
+  {
+    "id": "m2",
+    "company": "Acme Corp",
+    "subject": "Interview invitation",
+    "date": "2026-09-21",
+    "body": "We would like to invite you to interview for the role next week. Please pick a slot."
+  },
+  {
+    "id": "m3",
+    "company": "SpamCo",
+    "subject": "50% off courses!!!",
+    "date": "2026-09-22",
+    "body": "Buy our courses now, 50 percent off, limited offer, not a job response."
+  }
+]

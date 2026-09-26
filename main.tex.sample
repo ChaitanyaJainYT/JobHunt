@@ -1,0 +1,15 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=0.7in]{geometry}
+\usepackage{enumitem}
+\begin{document}
+\begin{center}
+{\Large Jane Doe} \\ Python Developer \\ jane.doe@example.com
+\end{center}
+\section*{Summary}
+Python developer with 3 years building APIs and data pipelines.
+\section*{Skills}
+Python, SQL, REST APIs, Git, Docker
+\section*{Experience}
+\textbf{Backend Developer} --- Acme (2022--Present) \\
+Built REST APIs in Python, improved SQL query performance.
+\end{document}
