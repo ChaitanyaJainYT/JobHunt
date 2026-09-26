@@ -45,11 +45,11 @@ class AppConfig:
 
 # key in .env -> (attr, required_for_real_run, prompt_text)
 _MANAGED_KEYS: list[tuple[str, str, bool, str]] = [
-    ("GEMINI_API_KEY", "gemini_api_key", True, "Gemini API key (https://aistudio.google.com/app/apikey)"),
-    ("GROQ_API_KEY", "groq_api_key", False, "Groq API key (optional fallback, Enter to skip)"),
+    ("GEMINI_API_KEY", "gemini_api_key", True, "Gemini API key(s), comma-separated for rotation (https://aistudio.google.com/app/apikey)"),
+    ("GROQ_API_KEY", "groq_api_key", False, "Groq API key(s), comma-separated (optional fallback, Enter to skip)"),
     ("GROQ_MODEL", "groq_model", False, "Groq model [openai/gpt-oss-120b]"),
     ("LLM_MODEL", "llm_model", False, "LLM model [gemini-3.6-flash]"),
-    ("RAPIDAPI_KEY", "rapidapi_key", True, "RapidAPI key (https://rapidapi.com, subscribe JSearch free)"),
+    ("RAPIDAPI_KEY", "rapidapi_key", True, "RapidAPI key(s), comma-separated (https://rapidapi.com, subscribe JSearch free)"),
     ("RAPIDAPI_HOST", "rapidapi_host", False, "RapidAPI host [jsearch.p.rapidapi.com]"),
     ("RAPIDAPI_JOB_ENDPOINT", "rapidapi_job_endpoint", False, "RapidAPI job endpoint URL"),
     ("RAPIDAPI_SEARCH_ENDPOINT", "rapidapi_search_endpoint", False, "RapidAPI search URL [search-v2]"),

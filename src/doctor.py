@@ -49,16 +49,22 @@ def run_doctor() -> list[CheckResult]:
         "" if ok else "Place your Overleaf resume as main.tex in project root.",
     ))
 
-    # 4. .env keys (presence only, masked)
+    # 4. .env keys (presence only, masked; key pools report counts)
+    from src.keypool import count_keys
     values = _read_dotenv(ENV_PATH) if ENV_PATH.exists() else {}
     import os
     for key in ["GEMINI_API_KEY", "RAPIDAPI_KEY", "GOOGLE_SHEET_ID"]:
         v = os.environ.get(key, values.get(key, ""))
         alt_ok = key == "GEMINI_API_KEY" and bool(os.environ.get("GROQ_API_KEY", values.get("GROQ_API_KEY", "")))
         ok = bool(v) or alt_ok
+        if ok and key in ("GEMINI_API_KEY", "RAPIDAPI_KEY"):
+            n = count_keys(v)
+            detail = f"{n} key{'s' if n != 1 else ''} set (masked)"
+        else:
+            detail = "set (masked)" if ok else "missing"
         results.append(CheckResult(
             f".env {key}", ok,
-            "set (masked)" if ok else "missing",
+            detail,
             "" if ok else "Run: python agent.py setup  (or use --demo for offline trial).",
         ))
 

@@ -9,9 +9,22 @@ import json
 import re
 import time
 
+from src.keypool import get_pool, is_quota_error
+
 
 class LLMError(Exception):
     pass
+
+
+class _Drained(Exception):
+    """All keys of one provider cooling down. Carries context for the final error."""
+
+    def __init__(self, provider: str, tried: int, last: Exception | None):
+        self.provider = provider
+        self.tried = tried
+        self.last = last
+        super().__init__(
+            f"quota exhausted, tried {tried} {provider} key(s): {last}")
 
 
 def _quiet_sdk_logging() -> None:
@@ -115,47 +128,88 @@ def complete_text(prompt: str, api_key: str = "", model: str = "gemini-3.6-flash
     raise _friendly_transport_error(last)
 
 
-def _call_gemini(prompt: str, api_key: str, model: str, timeout: int) -> str:
+def _call_gemini(prompt: str, api_key: str | list[str], model: str, timeout: int) -> str:
     from google import genai
     from google.genai import types
-    client = genai.Client(api_key=api_key)
-    resp = client.models.generate_content(
-        model=model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            http_options=types.HttpOptions(timeout=max(1, timeout) * 1000)),
-    )
-    return getattr(resp, "text", "") or ""
+    pool = get_pool("gemini", api_key)
+    if not pool:
+        raise LLMError("No Gemini key. Run 'python agent.py setup' or use --demo.")
+    last: Exception | None = None
+    tried = 0
+    for _ in range(len(pool)):
+        key = pool.next()
+        tried += 1
+        try:
+            client = genai.Client(api_key=key)
+            resp = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    http_options=types.HttpOptions(timeout=max(1, timeout) * 1000)),
+            )
+            pool.report_success(key)
+            return getattr(resp, "text", "") or ""
+        except Exception as e:
+            if is_quota_error(e):
+                pool.report_quota(key)
+                last = e
+                continue
+            raise
+    if tried > 1 and last is not None:
+        raise _Drained("Gemini", tried, last)
+    raise last if last is not None else LLMError("Gemini call failed.")
 
 
-def _call_groq(prompt: str, groq_key: str, model: str = "openai/gpt-oss-120b") -> str:
+def _call_groq(prompt: str, groq_key: str | list[str], model: str = "openai/gpt-oss-120b") -> str:
     import requests
-    r = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={"Authorization": f"Bearer {groq_key}"},
-        json={"model": model or "openai/gpt-oss-120b",
-              "messages": [{"role": "user", "content": prompt}],
-              "temperature": 0.2},
-        timeout=60,
-    )
-    if r.status_code in (401, 403):
-        raise LLMError("Groq key rejected. Fix: python agent.py setup.")
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
+    pool = get_pool("groq", groq_key)
+    if not pool:
+        raise LLMError("No Groq key. Run 'python agent.py setup' or use --demo.")
+    last: Exception | None = None
+    tried = 0
+    for _ in range(len(pool)):
+        key = pool.next()
+        tried += 1
+        try:
+            r = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key}"},
+                json={"model": model or "openai/gpt-oss-120b",
+                      "messages": [{"role": "user", "content": prompt}],
+                      "temperature": 0.2},
+                timeout=60,
+            )
+            if r.status_code in (401, 403):
+                raise LLMError("Groq key rejected. Fix: python agent.py setup.")
+            r.raise_for_status()
+            pool.report_success(key)
+            return r.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            if isinstance(e, LLMError) or not is_quota_error(e):
+                raise
+            pool.report_quota(key)
+            last = e
+    if tried > 1 and last is not None:
+        raise _Drained("Groq", tried, last)
+    raise last if last is not None else LLMError("Groq call failed.")
 
 
-def _call_preferred(prompt: str, api_key: str, groq_key: str,
+def _call_preferred(prompt: str, api_key: str | list[str], groq_key: str | list[str],
                     model: str, groq_model: str, timeout: int) -> str:
-    """Gemini first; on quota exhaustion auto-fall back to Groq if configured."""
-    try:
-        if api_key:
+    """Gemini pool first; on exhaustion fall back to the Groq pool if configured."""
+    from src.keypool import count_keys
+    if count_keys(api_key):
+        try:
             return _call_gemini(prompt, api_key, model, timeout)
+        except _Drained:
+            pass  # drained pool below; try Groq if configured
+        except Exception as e:
+            if not (count_keys(groq_key) and is_quota_error(e)):
+                raise
+            # single-key original quota error below; try Groq if configured
+    if count_keys(groq_key):
         return _call_groq(prompt, groq_key, groq_model)
-    except Exception as e:
-        msg = str(e)
-        if api_key and groq_key and ("429" in msg or "quota" in msg.lower()):
-            return _call_groq(prompt, groq_key, groq_model)
-        raise
+    raise LLMError("No LLM key. Run 'python agent.py setup' or use --demo.")
 
 
 def fix_latex(broken_tex: str, error_log: str, api_key: str = "",

@@ -60,6 +60,60 @@ def test_fetch_401_message(monkeypatch):
         fetch_job("https://www.linkedin.com/jobs/view/111", "bad", "h", "https://e")
 
 
+def test_fetch_rotates_keys_on_429(monkeypatch):
+    from src.keypool import _POOLS
+    _POOLS.clear()
+    seen_keys = []
+    good = {"data": [{
+        "job_title": "Backend Dev",
+        "employer_name": "Acme",
+        "job_description": "Python role",
+        "job_apply_link": "https://apply.here/1",
+    }]}
+
+    def fake_get(url, headers=None, **k):
+        seen_keys.append(headers["X-RapidAPI-Key"])
+        if len(seen_keys) == 1:
+            return _resp(429, {}, "Too many requests")
+        return _resp(200, good)
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    job = fetch_job("https://www.linkedin.com/jobs/view/111", "k1,k2", "h", "https://e")
+    assert job.title == "Backend Dev"
+    assert seen_keys == ["k1", "k2"]
+    _POOLS.clear()
+
+
+def test_fetch_all_keys_drained_mentions_count(monkeypatch):
+    from src.keypool import _POOLS
+    _POOLS.clear()
+    monkeypatch.setattr(requests, "get",
+                        lambda *a, **k: _resp(429, {}, "Too many requests"))
+    with pytest.raises(JobFetchError, match="tried 2 keys"):
+        fetch_job("https://www.linkedin.com/jobs/view/111", "k1,k2", "h", "https://e")
+    _POOLS.clear()
+
+
+def test_search_rotates_keys_on_429(monkeypatch):
+    from src.keypool import _POOLS
+    from src.job_api import search_jobs
+    _POOLS.clear()
+    seen_keys = []
+    good = {"status": "OK", "data": {"jobs": [{"job_id": "T1"}]}}
+
+    def fake_get(url, headers=None, **k):
+        seen_keys.append(headers["X-RapidAPI-Key"])
+        if len(seen_keys) == 1:
+            return _resp(429, {}, "Too many requests")
+        return _resp(200, good)
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    out = search_jobs("dev", "k1,k2", "h", "https://e/search-v2")
+    assert out == [{"job_id": "T1"}]
+    assert seen_keys == ["k1", "k2"]
+    _POOLS.clear()
+
+
 def test_fetch_timeout(monkeypatch):
     def boom(*a, **k):
         raise requests.Timeout()

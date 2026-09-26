@@ -150,8 +150,7 @@ Per job: `output/<Company>_<JobId>/job.json` (now also carries `status` + `sheet
 ## Troubleshooting
 
 - `401/403 RapidAPI`: key wrong or JSearch not subscribed -> RapidAPI dashboard -> `setup` again.
-- `429 quota`: free tier exhausted -> wait/upgrade or `--demo`.
-- `tectonic not found`: install above, reopen terminal, `doctor` must show PASS.
+- `429 quota`: free tier exhausted -> wait/upgrade or `--demo`. Tip: put several keys comma-separated (`KEY=k1,k2`) — calls rotate round-robin and a 429'd key cools down automatically (60s, doubling to 1h). `doctor` shows how many keys are configured. RapidAPI rotation only helps across *accounts* (same-account keys share one quota).
 - `tectonic failed ... .log`: LLM broke LaTeX; agent auto-retries twice with fix prompt, else preserves `.tex` + `.tectonic.log` and still logs Sheet with `PDF: FAILED`. Manual: `tectonic --outdir <folder> <file>.tex`.
 - `API key not valid (Gemini)`: `setup` again, check aistudio key.
 - `LLM quota exceeded (429)`: free-tier budget hit. Small calls may still pass; big tailor calls fail first. Wait a few minutes and retry with `--resume` (reuses saved match, costs 1 call). For a permanent cushion, add a free `GROQ_API_KEY` (console.groq.com) — the app auto-falls-back to Groq on Gemini quota errors.
