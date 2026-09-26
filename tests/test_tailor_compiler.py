@@ -74,6 +74,24 @@ def test_compile_missing_tectonic(tmp_path, monkeypatch):
         Cp.compile_tex(tmp_path / "R.tex")
 
 
+def test_install_hint_per_platform(monkeypatch):
+    import sys
+    monkeypatch.setattr(sys, "platform", "darwin")
+    import platform
+    monkeypatch.setattr(platform, "machine", lambda: "arm64")
+    assert "aarch64-apple-darwin" in Cp.tectonic_install_hint()
+    monkeypatch.setattr(platform, "machine", lambda: "x86_64")
+    assert "x86_64-apple-darwin" in Cp.tectonic_install_hint()
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert "msvc" in Cp.tectonic_install_hint()
+    monkeypatch.setattr(sys, "platform", "linux")
+    import platform
+    monkeypatch.setattr(platform, "machine", lambda: "x86_64")
+    assert "x86_64-unknown-linux-musl" in Cp.tectonic_install_hint()
+    monkeypatch.setattr(platform, "machine", lambda: "aarch64")
+    assert "aarch64-unknown-linux-musl" in Cp.tectonic_install_hint()
+
+
 def test_find_tectonic_prefers_bundled(tmp_path, monkeypatch):
     fake = tmp_path / "tectonic.exe"
     fake.write_bytes(b"x")

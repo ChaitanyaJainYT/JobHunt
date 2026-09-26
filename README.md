@@ -4,12 +4,14 @@ Prepares a tailored LaTeX resume PDF for a job URL, logs to Google Sheets, and t
 
 ## 5-min quickstart
 
-Windows (PowerShell) — easiest:
+Windows — easiest (double-click in Explorer, no terminal needed):
 
-```powershell
-.\setup.ps1    # Python check, packages, tectonic, .env, guided key setup, doctor
-.\run.ps1      # launches the web UI
-```
+- **`setup.cmd`** → Python check, packages, tectonic, `.env`, guided key setup, doctor
+- **`run.cmd`** → launches the web UI (closing its window stops the server)
+
+These are thin launchers around `setup.ps1` / `run.ps1` (same names, runnable
+from PowerShell too) — they handle the execution-policy bypass for that run
+only and keep the window open so you can read the output.
 
 Or step by step (any shell):
 
@@ -19,6 +21,50 @@ python agent.py doctor
 python agent.py --demo "https://www.linkedin.com/jobs/view/4012345678"
 python agent.py check-mail --demo --days 7
 ```
+
+## macOS
+
+Yes — the Python app itself is fully portable (pathlib throughout, no
+Windows-only calls; Google OAuth, Sheets/Gmail APIs, and tectonic all work
+on macOS). Platform-specific bits are isolated to the launchers:
+
+```bash
+chmod +x setup.sh run.sh   # first time only
+./setup.sh                 # Python check, packages, tectonic, .env, guided setup, doctor
+./run.sh                   # launches the web UI (Ctrl+C stops it)
+```
+
+Notes:
+- `setup.sh` detects Apple Silicon vs Intel and downloads the matching
+  tectonic build (`aarch64` / `x86_64-apple-darwin`) into `tools/tectonic/`.
+- Use `python3` (macOS 12.3+ ships no Python: install from
+  https://www.python.org/downloads/macos/ or `brew install python@3.12`).
+  If `pip` is missing you may also need `xcode-select --install`.
+- Everything else is identical: same `.env` keys (copy yours over), same
+  `main.tex`, same `credentials.json`/`token.json` OAuth flow.
+- Not tested by the maintainer on Mac hardware — if `doctor` reports
+  anything red there, paste the output and it will be fixed.
+
+## Linux
+
+Same scripts, same flow:
+
+```bash
+chmod +x setup.sh run.sh   # first time only
+./setup.sh                 # Python check, packages, tectonic, .env, guided setup, doctor
+./run.sh                   # launches the web UI (Ctrl+C stops it)
+```
+
+Linux-specific behavior (all automatic):
+- **Python**: any `python3` 3.10+ (`sudo apt install python3 python3-pip python3-venv`
+  on Debian/Ubuntu if anything is missing).
+- **PEP 668** (`externally-managed-environment` on Debian 12+/Ubuntu 23.04+):
+  instead of fighting the OS, setup creates a local `.venv/` and installs
+  there — `run.sh` uses it automatically when present.
+- **Tectonic**: fully static musl builds (`x86_64`/`aarch64-unknown-linux-musl`),
+  so they run on glibc *and* musl distros (Ubuntu, Fedora, Arch, Alpine…).
+- The Linux setup path is integration-tested (stubbed interpreter proving the
+  externally-managed → venv fallback and the real musl download URL).
 
 Real run (one-time guided setup — key pages open automatically, base resume uploadable from the Setup panel — then one command per job):
 

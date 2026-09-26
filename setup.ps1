@@ -1,6 +1,7 @@
 ﻿# JobHunt one-time setup (Windows PowerShell 5.1+).
 #
-# Run from the project folder:
+# Easiest: double-click setup.cmd in Explorer.
+# From a terminal, run from the project folder:
 #   powershell -ExecutionPolicy Bypass -File .\setup.ps1
 # Or after allowing local scripts once:
 #   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned

@@ -30,6 +30,31 @@ def find_tectonic() -> str | None:
     return shutil.which("tectonic")
 
 
+def tectonic_install_hint() -> str:
+    """Platform-appropriate manual install instructions (used when missing)."""
+    import sys
+    base = "https://github.com/tectonic-typesetting/tectonic/releases"
+    if sys.platform == "darwin":
+        import platform
+        triple = ("aarch64-apple-darwin" if platform.machine() == "arm64"
+                  else "x86_64-apple-darwin")
+        return (f"Download tectonic-0.17.0-{triple}.tar.gz from {base}, unpack "
+                "the tectonic binary to tools/tectonic/ (or run ./setup.sh), and retry. ")
+    if sys.platform == "win32":
+        return ("Download tectonic-*-x86_64-pc-windows-msvc.zip from "
+                f"{base}, unpack tectonic.exe to tools/tectonic/ "
+                "(or run .\\setup.ps1), and retry. ")
+    if sys.platform.startswith("linux"):
+        import platform
+        machine = platform.machine()
+        triple = ("aarch64-unknown-linux-musl" if machine in ("aarch64", "arm64")
+                  else "x86_64-unknown-linux-musl")
+        return (f"Download tectonic-0.17.0-{triple}.tar.gz from {base}, unpack "
+                "the tectonic binary to tools/tectonic/ (or run ./setup.sh), and retry. ")
+    return (f"Download the tectonic build for your platform from {base}, unpack "
+            "the binary to tools/tectonic/, and retry. ")
+
+
 def _tectonic_cmd(tex_path: Path, outdir: Path) -> list[str]:
     exe = find_tectonic() or "tectonic"
     return [exe, "--outdir", str(outdir), str(tex_path)]
@@ -42,9 +67,7 @@ def compile_tex(tex_path: Path, timeout: int = 600) -> Path:
     if not exe:
         raise LatexCompileError(
             "tectonic not found (no tools/tectonic/ copy, not in PATH). "
-            "Download tectonic-*-x86_64-pc-windows-msvc.zip from "
-            "https://github.com/tectonic-typesetting/tectonic/releases, unpack "
-            "tectonic.exe to tools/tectonic/, and retry. "
+            + tectonic_install_hint() +
             f"Your .tex is preserved at {tex_path}."
         )
     outdir = tex_path.parent

@@ -30,15 +30,13 @@ def run_doctor() -> list[CheckResult]:
     ))
 
     # 2. tectonic (bundled copy counts: no PATH setup needed)
-    from src.compiler import bundled_tectonic
+    from src.compiler import bundled_tectonic, tectonic_install_hint
     bundled = bundled_tectonic()
     found = str(bundled) if bundled is not None else shutil.which("tectonic")
     results.append(CheckResult(
         "tectonic available", bool(found),
         f"{found} (bundled)" if bundled is not None else (found or "not found"),
-        "" if found else ("Download tectonic-*-x86_64-pc-windows-msvc.zip from "
-                          "github.com/tectonic-typesetting/tectonic/releases and unpack "
-                          "tectonic.exe to tools/tectonic/."),
+        "" if found else tectonic_install_hint(),
     ))
 
     # 3. base resume

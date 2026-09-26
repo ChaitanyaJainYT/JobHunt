@@ -1,5 +1,7 @@
 ﻿# JobHunt launcher (Windows PowerShell 5.1+).
 #
+# Easiest: double-click run.cmd in Explorer.
+# From a terminal:
 #   .\run.ps1                 # start the web UI (opens http://127.0.0.1:8765)
 #   .\run.ps1 --port 9000     # extra args are passed straight to `agent.py ui`
 #   .\run.ps1 --help          # show the UI options
