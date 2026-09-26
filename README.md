@@ -4,6 +4,15 @@ Prepares a tailored LaTeX resume PDF for a job URL, logs to Google Sheets, and t
 
 ## 5-min quickstart
 
+Windows (PowerShell) — easiest:
+
+```powershell
+.\setup.ps1    # Python check, packages, tectonic, .env, guided key setup, doctor
+.\run.ps1      # launches the web UI
+```
+
+Or step by step (any shell):
+
 ```bash
 pip install -r requirements.txt
 python agent.py doctor
